@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "soc-log-anonymizer"
+version = "2.1.0"
+description = "Анонимизация логов SOC перед отправкой во внешнюю LLM (только стандартная библиотека Python)"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+authors = [
+    { name = "SOC Log Anonymizer contributors" }
+]
+keywords = ["soc", "security", "log-anonymization", "llm", "privacy", "pii"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Security",
+    "Intended Audience :: Information Technology",
+]
+dependencies = []
+
+[project.scripts]
+soc-log-anonymizer = "soc_log_anonymizer.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["soc_log_anonymizer*"]

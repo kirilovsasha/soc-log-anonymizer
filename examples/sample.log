@@ -1,0 +1,11 @@
+2026-08-27 10:00:01 bank-vpn: src=192.168.1.10 dst=10.0.0.5 suser=jdoe duser=Administrator
+2026-08-27 10:00:05 bank-fw: ALLOW src=192.168.1.10 dst=8.8.8.8 dport=443
+Connection from 192.168.1.10 to server db01.bank.local, user=jdoe
+Failed login: user=jdoe login_from=192.168.1.10 reason=bad_password
+password: SuperSecretP@ss123
+Email contact: jdoe@bank.com, phone: +375291234567
+SID: S-1-5-21-3623811015-3361044348-30300820-1013 (custom, чувствительно), well-known: S-1-5-18 (не маскируется)
+GUID: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+Hash (NTLM): 5f4dcc3b5aa765d61d8327deb882cf99
+MAC: 00:1A:2B:3C:4D:5E
+JWT: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U

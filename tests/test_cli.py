@@ -1,0 +1,270 @@
+"""
+Тесты CLI-интерфейса (unittest.mock — без сторонних зависимостей).
+
+Запуск:
+    python -m unittest discover -s tests -v
+"""
+
+import gzip
+import io
+import json
+import os
+import sys
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from unittest import mock
+
+from soc_log_anonymizer import __version__, cli
+from soc_log_anonymizer.anonymizer import SOCLogAnonymizer
+
+
+class TestCliVersion(unittest.TestCase):
+    def test_version_flag_exits_zero_and_prints_version(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            with self.assertRaises(SystemExit) as ctx:
+                cli.main(["--version"])
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn(__version__, buf.getvalue())
+
+    def test_version_works_without_subcommand(self):
+        """--version не должен требовать обязательную подкоманду —
+        argparse обрабатывает action='version' до проверки required=True
+        у subparsers."""
+        with redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit) as ctx:
+                cli.main(["--version"])
+        self.assertEqual(ctx.exception.code, 0)
+
+
+class TestCliGzipSupport(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+        self.salt_path = os.path.join(self.tmpdir.name, "salt.txt")
+        with open(self.salt_path, "w", encoding="utf-8") as f:
+            f.write("gzip-test-salt")
+        self.gz_path = os.path.join(self.tmpdir.name, "raw.log.gz")
+        with gzip.open(self.gz_path, "wt", encoding="utf-8") as f:
+            f.write("src=192.168.1.10 user=jdoe\n")
+
+    def test_anonymize_gzip_input_plain_mode(self):
+        out_path = os.path.join(self.tmpdir.name, "clean.log")
+        exit_code = cli.main([
+            "anonymize", "-i", self.gz_path, "-o", out_path, "--salt-file", self.salt_path,
+        ])
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        with open(out_path, encoding="utf-8") as f:
+            content = f.read()
+        self.assertNotIn("192.168.1.10", content)
+        self.assertNotIn("jdoe", content)
+
+    def test_anonymize_gzip_input_stream_mode(self):
+        out_path = os.path.join(self.tmpdir.name, "clean_stream.log")
+        exit_code = cli.main([
+            "anonymize", "-i", self.gz_path, "-o", out_path, "--salt-file", self.salt_path, "--stream",
+        ])
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        with open(out_path, encoding="utf-8") as f:
+            content = f.read()
+        self.assertNotIn("192.168.1.10", content)
+
+    def test_batch_gzip_output_filename_drops_gz_suffix(self):
+        in_dir = os.path.join(self.tmpdir.name, "in")
+        os.makedirs(in_dir)
+        with gzip.open(os.path.join(in_dir, "a.log.gz"), "wt", encoding="utf-8") as f:
+            f.write("user=jdoe ip=10.0.0.1\n")
+        out_dir = os.path.join(self.tmpdir.name, "out")
+
+        exit_code = cli.main([
+            "batch", "--input-dir", in_dir, "--output-dir", out_dir, "--salt-file", self.salt_path,
+        ])
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        self.assertTrue(os.path.exists(os.path.join(out_dir, "a.log")))
+        self.assertFalse(os.path.exists(os.path.join(out_dir, "a.log.gz")))
+
+
+class TestCliAnonymize(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+        self.salt_path = os.path.join(self.tmpdir.name, "salt.txt")
+        with open(self.salt_path, "w", encoding="utf-8") as f:
+            f.write("test-salt-for-cli")
+        self.in_path = os.path.join(self.tmpdir.name, "raw.log")
+        with open(self.in_path, "w", encoding="utf-8") as f:
+            f.write("src=192.168.1.10 user=jdoe\n")
+
+    def test_anonymize_file_to_file_exit_ok(self):
+        out_path = os.path.join(self.tmpdir.name, "clean.log")
+        exit_code = cli.main([
+            "anonymize", "-i", self.in_path, "-o", out_path,
+            "--salt-file", self.salt_path, "--org", "bank",
+        ])
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        with open(out_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertNotIn("192.168.1.10", content)
+        self.assertNotIn("jdoe", content)
+
+    def test_anonymize_stdin_stdout(self):
+        buf_out = io.StringIO()
+        with mock.patch("sys.stdin", io.StringIO("email jdoe@bank.com")), \
+             redirect_stdout(buf_out):
+            exit_code = cli.main(["anonymize", "--salt-file", self.salt_path])
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        self.assertNotIn("jdoe@bank.com", buf_out.getvalue())
+
+    def test_save_and_reuse_mapping(self):
+        out_path = os.path.join(self.tmpdir.name, "clean.log")
+        mapping_path = os.path.join(self.tmpdir.name, "mapping.json")
+        cli.main([
+            "anonymize", "-i", self.in_path, "-o", out_path,
+            "--salt-file", self.salt_path, "--save-mapping", mapping_path,
+        ])
+        self.assertTrue(os.path.exists(mapping_path))
+        if os.name == "posix":
+            mode = oct(os.stat(mapping_path).st_mode & 0o777)
+            self.assertEqual(mode, "0o600")
+
+        restored_path = os.path.join(self.tmpdir.name, "restored.log")
+        exit_code = cli.main([
+            "deanonymize", "-i", out_path, "-o", restored_path, "--mapping", mapping_path,
+        ])
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        with open(restored_path, "r", encoding="utf-8") as f:
+            restored = f.read()
+        with open(self.in_path, "r", encoding="utf-8") as f:
+            original = f.read()
+        self.assertEqual(restored, original)
+
+    def test_multi_file_glob_requires_output_dir(self):
+        second_path = os.path.join(self.tmpdir.name, "raw2.log")
+        with open(second_path, "w", encoding="utf-8") as f:
+            f.write("user=alice\n")
+
+        pattern = os.path.join(self.tmpdir.name, "raw*.log")
+        exit_code = cli.main(["anonymize", pattern, "--salt-file", self.salt_path])
+        self.assertEqual(exit_code, cli.EXIT_ERROR)  # несколько файлов без --output-dir
+
+    def test_multi_file_glob_with_output_dir(self):
+        second_path = os.path.join(self.tmpdir.name, "raw2.log")
+        with open(second_path, "w", encoding="utf-8") as f:
+            f.write("user=alice\n")
+        out_dir = os.path.join(self.tmpdir.name, "out")
+
+        pattern = os.path.join(self.tmpdir.name, "raw*.log")
+        exit_code = cli.main(["anonymize", pattern, "--output-dir", out_dir, "--salt-file", self.salt_path])
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        self.assertTrue(os.path.exists(os.path.join(out_dir, "raw.log")))
+        self.assertTrue(os.path.exists(os.path.join(out_dir, "raw2.log")))
+
+    def test_env_var_salt_file(self):
+        out_path = os.path.join(self.tmpdir.name, "clean.log")
+        with mock.patch.dict(os.environ, {cli.ENV_SALT_FILE: self.salt_path}):
+            exit_code = cli.main(["anonymize", "-i", self.in_path, "-o", out_path])
+        self.assertEqual(exit_code, cli.EXIT_OK)
+
+
+class TestCliFailOnUnsafe(unittest.TestCase):
+    """verify() детерминирован относительно паттернов анонимизации, поэтому
+    для гарантированного 'unsafe'-случая мокаем SOCLogAnonymizer.verify."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+        self.salt_path = os.path.join(self.tmpdir.name, "salt.txt")
+        with open(self.salt_path, "w", encoding="utf-8") as f:
+            f.write("test-salt")
+        self.in_path = os.path.join(self.tmpdir.name, "raw.log")
+        with open(self.in_path, "w", encoding="utf-8") as f:
+            f.write("some log line\n")
+
+    def test_fail_on_unsafe_returns_exit_code_2(self):
+        with mock.patch.object(SOCLogAnonymizer, "verify", return_value=(False, ["synthetic issue"])):
+            exit_code = cli.main([
+                "anonymize", "-i", self.in_path, "--salt-file", self.salt_path, "--fail-on-unsafe",
+            ])
+        self.assertEqual(exit_code, cli.EXIT_UNSAFE)
+
+    def test_unsafe_without_flag_returns_exit_code_0(self):
+        with mock.patch.object(SOCLogAnonymizer, "verify", return_value=(False, ["synthetic issue"])):
+            exit_code = cli.main(["anonymize", "-i", self.in_path, "--salt-file", self.salt_path])
+        self.assertEqual(exit_code, cli.EXIT_OK)
+
+
+class TestCliValidateConfig(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+
+    def test_valid_config_exit_ok(self):
+        path = os.path.join(self.tmpdir.name, "cfg.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"org_name": "acme"}, f)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            exit_code = cli.main(["validate-config", path])
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        self.assertIn("OK", buf.getvalue())
+
+    def test_invalid_config_exit_error(self):
+        path = os.path.join(self.tmpdir.name, "cfg.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"fqdn_tlds": [], "cef_fields": []}, f)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            exit_code = cli.main(["validate-config", path])
+        self.assertEqual(exit_code, cli.EXIT_ERROR)
+        self.assertIn("Найдено проблем", buf.getvalue())
+
+    def test_ini_config_roundtrip(self):
+        from soc_log_anonymizer.config import AnonymizerConfig
+        path = os.path.join(self.tmpdir.name, "cfg.ini")
+        cfg = AnonymizerConfig(org_name="acme", hash_len=10)
+        cfg.save(path)
+        loaded = AnonymizerConfig.load(path)
+        self.assertEqual(loaded.org_name, "acme")
+        self.assertEqual(loaded.hash_len, 10)
+        self.assertTrue(loaded.fqdn_tlds)  # список должен восстановиться
+
+
+class TestCliBatch(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+        self.salt_path = os.path.join(self.tmpdir.name, "salt.txt")
+        with open(self.salt_path, "w", encoding="utf-8") as f:
+            f.write("batch-salt")
+        self.in_dir = os.path.join(self.tmpdir.name, "in")
+        os.makedirs(os.path.join(self.in_dir, "sub"))
+        with open(os.path.join(self.in_dir, "a.log"), "w", encoding="utf-8") as f:
+            f.write("user=jdoe ip=10.0.0.1\n")
+        with open(os.path.join(self.in_dir, "sub", "b.log"), "w", encoding="utf-8") as f:
+            f.write("user=jdoe ip=10.0.0.1\n")
+
+    def test_batch_consistent_across_files(self):
+        out_dir = os.path.join(self.tmpdir.name, "out")
+        exit_code = cli.main([
+            "batch", "--input-dir", self.in_dir, "--output-dir", out_dir,
+            "--salt-file", self.salt_path,
+        ])
+        self.assertEqual(exit_code, cli.EXIT_OK)
+        with open(os.path.join(out_dir, "a.log"), encoding="utf-8") as f:
+            a_content = f.read()
+        with open(os.path.join(out_dir, "sub", "b.log"), encoding="utf-8") as f:
+            b_content = f.read()
+        self.assertEqual(a_content, b_content)
+
+    def test_batch_no_files_found_exit_error(self):
+        out_dir = os.path.join(self.tmpdir.name, "out2")
+        exit_code = cli.main([
+            "batch", "--input-dir", self.in_dir, "--output-dir", out_dir,
+            "--pattern", "*.nomatch", "--salt-file", self.salt_path,
+        ])
+        self.assertEqual(exit_code, cli.EXIT_ERROR)
+
+
+if __name__ == "__main__":
+    unittest.main()
