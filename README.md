@@ -110,7 +110,7 @@ Python-библиотека.
 ### Вариант 1 — запуск без установки
 
 ```bash
-git clone https://github.com/<your-org>/soc-log-anonymizer.git
+git clone https://github.com/kirilovsasha/soc-log-anonymizer.git
 cd soc-log-anonymizer
 python3 -m soc_log_anonymizer            # GUI
 python3 -m soc_log_anonymizer anonymize -i raw.log --salt-file salt.txt
