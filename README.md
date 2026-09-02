@@ -1,6 +1,6 @@
 # SOC Log Anonymizer
 
-[![CI](https://github.com/<your-org>/soc-log-anonymizer/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-org>/soc-log-anonymizer/actions/workflows/ci.yml)
+[![CI](https://github.com/kirilovsasha/soc-log-anonymizer/actions/workflows/ci.yml/badge.svg)](https://github.com/kirilovsasha/soc-log-anonymizer/actions/workflows/ci.yml)
 
 Инструмент для SOC-аналитиков: маскирует чувствительные данные в логах
 (IP-адреса, логины, email, хэши, SID, GUID, MAC, JWT, секреты и т.д.)
@@ -15,9 +15,6 @@
 
 Доступен как GUI (tkinter), CLI (для пайплайнов/автоматизации) и как
 Python-библиотека.
-
-> Замените `<your-org>` в бейдже CI выше на реальный путь репозитория
-> после публикации на GitHub.
 
 ---
 
