@@ -20,20 +20,7 @@ def _fast(**kwargs):
     return SOCLogAnonymizer(salt="test-salt", org_name="bank", config=cfg)
 
 
-class TestMaskTypesAllowlist(unittest.TestCase):
-    def test_skip_hash_leaves_hex(self):
-        a = _fast(skip_types=["HASH"], hash_require_context=False)
-        blob = "5f4dcc3b5aa765d61d8327deb882cf99"
-        out = a.anonymize_text(f"NTLM hash {blob}")
-        self.assertIn(blob, out)
-
-    def test_mask_types_user_and_org_only(self):
-        a = _fast(mask_types=["USER", "ORG"])
-        out = a.anonymize_text("user=jdoe from 10.0.0.5 bank ticket")
-        self.assertNotIn("jdoe", out)
-        self.assertIn("10.0.0.5", out)
-        self.assertIn("[ORG_", out)
-
+class TestAllowlist(unittest.TestCase):
     def test_allowlist_keeps_public_dns(self):
         a = _fast(allowlist=["8.8.8.8"])
         out = a.anonymize_text("dns 8.8.8.8 and 1.1.1.1")

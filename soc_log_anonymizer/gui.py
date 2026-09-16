@@ -24,9 +24,6 @@ from .audit import log_audit_event
 from .config import AnonymizerConfig, find_default_config_path, _app_dir
 from .gui_session import (
     extract_session_profile,
-    format_csv,
-    parse_csv_types,
-    parse_csv_values,
     session_fields_from_config,
 )
 from .gui_theme import (
@@ -47,17 +44,14 @@ from .gui_logic import (
     inline_diff_spans,
     normalize_keysym,
     typed_value_spans,
-    detect_rule_conflicts,
     find_context_snippet,
     format_result_status,
     format_result_payload,
     format_size_warning,
     salt_entropy_warning,
     status_style_name,
-    summarize_active_rules,
     truncate_display_text,
     validate_regex_pattern,
-    format_scan_report,
     mapping_rows_filtered,
 )
 from .io_utils import format_size_mb, read_file_auto_encoding
@@ -257,13 +251,6 @@ class AnonymizerGUI:
         profile = extract_session_profile(self._gui_state)
         if hasattr(self, "entry_org") and profile.get("org_name"):
             self._set_widget_content(self.entry_org, profile["org_name"])
-        if hasattr(self, "entry_mask_types"):
-            self.entry_mask_types.delete(0, tk.END)
-            self.entry_mask_types.insert(0, format_csv(profile.get("mask_types") or self.config.mask_types))
-            self.entry_skip_types.delete(0, tk.END)
-            self.entry_skip_types.insert(0, format_csv(profile.get("skip_types") or self.config.skip_types))
-            self.entry_allowlist.delete(0, tk.END)
-            self.entry_allowlist.insert(0, format_csv(profile.get("allowlist") or self.config.allowlist))
         self.root.after_idle(self._restore_editor_sash)
 
     def _restore_editor_sash(self) -> None:
@@ -284,12 +271,7 @@ class AnonymizerGUI:
         }
         if hasattr(self, "entry_org"):
             org = self._entry_value(self.entry_org) or self.config.org_name
-            state.update(session_fields_from_config(
-                org,
-                parse_csv_types(self.entry_mask_types.get()) if hasattr(self, "entry_mask_types") else self.config.mask_types,
-                parse_csv_types(self.entry_skip_types.get()) if hasattr(self, "entry_skip_types") else self.config.skip_types,
-                parse_csv_values(self.entry_allowlist.get()) if hasattr(self, "entry_allowlist") else self.config.allowlist,
-            ))
+            state.update(session_fields_from_config(org))
         try:
             state["editor_sash"] = int(self.editor_paned.sashpos(0))
         except (AttributeError, tk.TclError):
@@ -857,9 +839,6 @@ class AnonymizerGUI:
         self.btn_process = ttk.Button(primary_actions, text=f"{ICON_RUN}  Анонимизировать", style="Primary.TButton",
                                        command=self.start_processing_thread)
         self.btn_process.pack(side=tk.LEFT, padx=6)
-        self.btn_scan = ttk.Button(primary_actions, text="Scan", style="Ghost.TButton",
-                                   command=self.start_scan_thread)
-        self.btn_scan.pack(side=tk.LEFT, padx=6)
 
         self.btn_cancel = ttk.Button(primary_actions, text="Отменить обработку",
                                      style="Danger.TButton", command=self.cancel_operation,
@@ -889,8 +868,6 @@ class AnonymizerGUI:
                    command=lambda: self._navigate_diff(-1)).pack(side=tk.LEFT, padx=6)
         ttk.Button(secondary_actions, text="Diff ▶", style="Ghost.TButton",
                    command=lambda: self._navigate_diff(1)).pack(side=tk.LEFT, padx=2)
-        ttk.Button(secondary_actions, text="Активные правила", style="Ghost.TButton",
-                   command=self.show_active_rules).pack(side=tk.LEFT, padx=6)
 
         settings_row = ttk.Frame(session_tab, style="Card.TFrame")
         settings_row.pack(fill=tk.X, padx=8, pady=8)
@@ -924,18 +901,6 @@ class AnonymizerGUI:
         self.sync_scroll_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(settings_row, text="Синхронный скролл", variable=self.sync_scroll_var
                          ).pack(side=tk.LEFT)
-
-        types_row = ttk.Frame(session_tab, style="Card.TFrame")
-        types_row.pack(fill=tk.X, padx=8, pady=(0, 8))
-        ttk.Label(types_row, text="mask_types", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
-        self.entry_mask_types = ttk.Entry(types_row, width=18, font=(FONT_UI, 9))
-        self.entry_mask_types.pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Label(types_row, text="skip_types", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
-        self.entry_skip_types = ttk.Entry(types_row, width=18, font=(FONT_UI, 9))
-        self.entry_skip_types.pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Label(types_row, text="allowlist", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
-        self.entry_allowlist = ttk.Entry(types_row, width=22, font=(FONT_UI, 9))
-        self.entry_allowlist.pack(side=tk.LEFT)
 
         status_bar = ttk.Frame(main, style="StatusBar.TFrame")
         status_bar.pack(fill=tk.X, padx=12, pady=(0, 8))
@@ -1847,7 +1812,6 @@ class AnonymizerGUI:
         self._set_progress(0)
         self._set_status("Обработка…", "Info")
 
-        self._apply_session_filters()
         new_anonymizer = SOCLogAnonymizer(salt=salt, org_name=org_name, config=self.config)
 
         threading.Thread(
@@ -1855,32 +1819,6 @@ class AnonymizerGUI:
             args=(raw_text, new_anonymizer),
             daemon=True
         ).start()
-
-    def _apply_session_filters(self) -> None:
-        if not hasattr(self, "entry_mask_types"):
-            return
-        self.config.mask_types = parse_csv_types(self.entry_mask_types.get())
-        self.config.skip_types = parse_csv_types(self.entry_skip_types.get())
-        self.config.allowlist = parse_csv_values(self.entry_allowlist.get())
-
-    def start_scan_thread(self):
-        raw_text = self._text_value(self.txt_input)
-        if not raw_text:
-            messagebox.showwarning("Предупреждение", "Введите или загрузите текст логов!")
-            return
-        self._apply_session_filters()
-        org_name = self._entry_value(self.entry_org) or self.config.org_name
-        scanner = SOCLogAnonymizer(salt="scan-preview", org_name=org_name, config=self.config)
-        findings = [item for item in scanner.find_matches(raw_text)
-                    if item["type"] not in ("CEF_KV", "SECRET", "USER_FIELD",
-                                            "AUTH_USER", "AUTH_USER_CISCO", "USER_PATH",
-                                            "BASE64_CMD")]
-        report = format_scan_report(findings)
-        self.txt_output.delete("1.0", tk.END)
-        self.txt_output.insert(tk.END, report)
-        self._full_output_text = None
-        self._set_status(f"Scan: {len(findings)} совпадений, лог не маскировался", "Info")
-        scanner.clear_sensitive_data()
 
     def _async_process(self, raw_text: str, new_anonymizer: SOCLogAnonymizer):
         stripped = raw_text.strip()
@@ -2574,48 +2512,6 @@ class AnonymizerGUI:
                 for item in self._last_file_report
             )
         messagebox.showinfo("Статистика замен (тип: число вхождений)", "\n".join(lines))
-
-    def show_active_rules(self):
-        """Show active regex/context rules, hits and detected conflicts."""
-        custom = list(getattr(self.config, "custom_patterns", {}).values())
-        context = list(getattr(self.config, "context_rules", []))
-        rows = summarize_active_rules(custom, context)
-        conflicts = detect_rule_conflicts(custom, context)
-        window = tk.Toplevel(self.root)
-        window.title("Активные правила")
-        window.geometry("900x420")
-        tree = ttk.Treeview(
-            window,
-            columns=("name", "type", "enabled", "valid", "hits", "priority", "pattern"),
-            show="headings",
-        )
-        headings = {
-            "name": "Имя", "type": "Тип", "enabled": "Включено",
-            "valid": "Regex", "hits": "Срабатывания", "priority": "Приоритет",
-            "pattern": "Шаблон",
-        }
-        for column, heading in headings.items():
-            tree.heading(column, text=heading)
-            tree.column(column, width=110 if column != "pattern" else 360)
-        stats = self.anonymizer.get_stats() if self.anonymizer else {}
-        for row in rows:
-            hits = stats.get(str(row["name"]).upper(), stats.get(row["name"], 0))
-            tree.insert("", tk.END, values=(
-                row["name"], row["type"], "да" if row["enabled"] else "нет",
-                "да" if row["valid"] else "нет", hits, row["priority"], row["pattern"],
-            ))
-        tree.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
-        if conflicts:
-            ttk.Label(
-                window,
-                text="Конфликты: " + " | ".join(conflicts),
-                style="Banner.TLabel",
-                wraplength=860,
-                justify=tk.LEFT,
-            ).pack(fill=tk.X, padx=8, pady=(0, 8))
-        elif not rows:
-            ttk.Label(window, text="Активные пользовательские правила не настроены.",
-                      style="Muted.TLabel").pack(pady=(0, 8))
 
 
 def main():

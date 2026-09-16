@@ -1,16 +1,16 @@
 """Registry of maskable types, families, and quality filters.
 
 Structural tags (CEF_KV, SECRET, USER_FIELD, …) still run so values can
-be classified; `_hash_val` then respects mask_types/skip_types/allowlist.
+be classified; `_hash_val` then respects allowlist.
 Vendor-specific *profiles* are intentionally out of scope.
 """
 
 from __future__ import annotations
 
 import re
-from typing import Dict, Iterable, Optional, Set
+from typing import Dict, Iterable
 
-# Public families that operators list in mask_types / skip_types.
+# Public detector families (documentation / UI filters).
 MASKABLE_FAMILIES = (
     "IP", "EMAIL", "USER", "FQDN", "ORG", "SID", "UUID", "MAC", "PHONE",
     "HASH", "JWT", "SECRET", "URL", "TOKEN",
@@ -76,34 +76,6 @@ def family_for_tag(tag: str) -> str:
     if tag.startswith("CUSTOM:"):
         return "CUSTOM"
     return TAG_FAMILY.get(tag, tag)
-
-
-def enabled_families(mask_types: Iterable[str], skip_types: Iterable[str]) -> Optional[Set[str]]:
-    """None means all families enabled (minus skip)."""
-    skip = {str(x).upper() for x in skip_types if str(x).strip()}
-    mask = {str(x).upper() for x in mask_types if str(x).strip()}
-    if mask:
-        return {name for name in mask if name not in skip}
-    return None if not skip else set(MASKABLE_FAMILIES) - skip
-
-
-def is_family_enabled(family: str, mask_types: Iterable[str], skip_types: Iterable[str]) -> bool:
-    if family in ("CEF_KV", "CUSTOM", "VALUE"):
-        if family == "VALUE":
-            skip = {str(x).upper() for x in skip_types if str(x).strip()}
-            mask = {str(x).upper() for x in mask_types if str(x).strip()}
-            if "VALUE" in skip:
-                return False
-            if mask and "VALUE" not in mask:
-                return False
-        return True
-    skip = {str(x).upper() for x in skip_types if str(x).strip()}
-    if family in skip:
-        return False
-    mask = {str(x).upper() for x in mask_types if str(x).strip()}
-    if mask and family not in mask:
-        return False
-    return True
 
 
 def is_allowlisted(value: str, allowlist: Iterable[str]) -> bool:

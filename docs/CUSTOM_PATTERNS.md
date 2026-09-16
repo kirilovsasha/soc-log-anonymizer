@@ -21,5 +21,3 @@
 - `priority`: больше — раньше.
 - Проверка: `python -m soc_log_anonymizer validate-config my.json`.
 - Не кладите сюда вендорский «профиль на все случаи»: один паттерн — одна сущность.
-
-Семьи `mask_types`/`skip_types` на custom не действуют: custom всегда opt-in.

@@ -94,10 +94,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 from .config import AnonymizerConfig
 from .detectors import (
     DEFAULT_FQDN_STOPWORDS,
-    STRUCTURAL_TAGS,
-    family_for_tag,
     is_allowlisted,
-    is_family_enabled,
     is_plausible_fqdn,
     is_plausible_free_text_hash,
     is_plausible_phone,
@@ -450,20 +447,12 @@ class SOCLogAnonymizer:
     # Классификация и хэширование значений
     # ------------------------------------------------------------------
 
-    def _type_enabled(self, tag: str) -> bool:
-        family = family_for_tag(tag)
-        return is_family_enabled(family, self.config.mask_types, self.config.skip_types)
-
     def _fqdn_stopwords(self):
         extra = {s.lower() for s in self.config.fqdn_stopwords}
         return set(DEFAULT_FQDN_STOPWORDS) | extra
 
     def _should_keep_value(self, val: str, tag: str) -> bool:
-        if is_allowlisted(val, self.config.allowlist):
-            return True
-        if not self._type_enabled(tag):
-            return True
-        return False
+        return is_allowlisted(val, self.config.allowlist)
 
     def _classify_value(self, val: str) -> str:
         """Определяет тип "сырого" значения (извлечённого из key=value,
@@ -489,8 +478,6 @@ class SOCLogAnonymizer:
 
     def _classify_value_uncached(self, v: str) -> str:
         for tag in self.CLASSIFY_ORDER:
-            if not self._type_enabled(tag):
-                continue
             pattern = self.patterns_dict.get(tag)
             if not pattern or not pattern.fullmatch(v):
                 continue
@@ -762,20 +749,14 @@ class SOCLogAnonymizer:
                 parts.append(mask_structured_line(line, self._mask_structured_token))
             text = "".join(parts)
         for prefix, pattern in self.patterns:
-            if prefix not in STRUCTURAL_TAGS and not prefix.startswith("CUSTOM:"):
-                if not self._type_enabled(prefix):
-                    continue
             if prefix == "CEF_KV":
                 text = pattern.sub(self._sub_cef_kv, text)
             elif prefix == "SECRET":
-                if self._type_enabled("SECRET"):
-                    text = pattern.sub(self._sub_key_value_generic("SECRET"), text)
+                text = pattern.sub(self._sub_key_value_generic("SECRET"), text)
             elif prefix == "USER_FIELD":
-                if self._type_enabled("USER"):
-                    text = pattern.sub(self._sub_key_value_generic("USER"), text)
+                text = pattern.sub(self._sub_key_value_generic("USER"), text)
             elif prefix in ("AUTH_USER", "AUTH_USER_CISCO"):
-                if self._type_enabled("USER"):
-                    text = pattern.sub(self._sub_force_tag("USER"), text)
+                text = pattern.sub(self._sub_force_tag("USER"), text)
             elif prefix == "ORG":
                 text = pattern.sub(self._sub_org, text)
             elif prefix == "IP":
@@ -789,11 +770,9 @@ class SOCLogAnonymizer:
             elif prefix == "USER":
                 text = pattern.sub(self._sub_windows_user, text)
             elif prefix == "BASE64_CMD":
-                if self._type_enabled("SECRET"):
-                    text = pattern.sub(self._sub_base64_cmd, text)
+                text = pattern.sub(self._sub_base64_cmd, text)
             elif prefix == "USER_PATH":
-                if self._type_enabled("USER"):
-                    text = pattern.sub(self._sub_user_path, text)
+                text = pattern.sub(self._sub_user_path, text)
             elif prefix == "SID":
                 text = pattern.sub(self._sub_sid, text)
             elif prefix == "UUID":
@@ -1092,8 +1071,6 @@ class SOCLogAnonymizer:
                     continue
                 if is_allowlisted(value, self.config.allowlist):
                     continue
-                if tag not in STRUCTURAL_TAGS and not tag.startswith("CUSTOM:") and not self._type_enabled(tag):
-                    continue
                 if tag == "HASH" and not is_plausible_free_text_hash(
                         value, text, match.start(), match.end(),
                         require_context=self.config.hash_require_context):
@@ -1138,8 +1115,6 @@ class SOCLogAnonymizer:
         for tag, pattern in self.patterns:
             if tag in ("CEF_KV", "SECRET", "USER_FIELD", "USER_PATH", "BASE64_CMD",
                        "AUTH_USER", "AUTH_USER_CISCO") or tag.startswith("CUSTOM:"):
-                continue
-            if not self._type_enabled(tag):
                 continue
 
             def _leftovers():

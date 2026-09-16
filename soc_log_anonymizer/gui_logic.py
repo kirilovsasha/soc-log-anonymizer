@@ -362,7 +362,6 @@ HOTKEYS: List[Tuple[str, str, str]] = [
     ("Ctrl+S", "save_file", "Сохранить результат"),
     ("Ctrl+Shift+C", "copy_result", "Скопировать результат в буфер обмена"),
     ("Ctrl+Enter", "start_processing_thread", "Анонимизировать"),
-    ("Ctrl+Shift+P", "start_scan_thread", "Scan: показать совпадения без маскирования"),
     ("Ctrl+D", "deanonymize_text", "Де-анонимизировать текст из левого окна"),
     # Не Ctrl+Z: tk.Text создан с undo=True, и Ctrl+Z пользователь ждёт
     # для отката СВОЕГО набора текста, а не операции анонимизации.

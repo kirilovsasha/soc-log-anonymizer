@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Removed GUI session fields `mask_types` / `skip_types` / `allowlist`; `allowlist` remains config-only.
+- Removed `mask_types` and `skip_types` configuration options entirely.
+
 ## 2.2.0
 
 - Removed generic PATH masking; protocol/date/cipher slashes stay intact.
