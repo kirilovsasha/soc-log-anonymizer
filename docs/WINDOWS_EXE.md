@@ -1,63 +1,58 @@
-# Windows EXE (PyInstaller)
+# Windows EXE (PyInstaller) — один автономный файл
 
-Раздача **SOC Log Anonymizer** аналитикам без установленного Python.
+Раздача **SOC Log Anonymizer** аналитикам как **одного `.exe`** без
+установленного Python.
 
-## Основная сборка: `--onedir` (быстрый старт)
+## Основная сборка: `--onefile`
 
 | Артефакт | Spec | Назначение |
 |---|---|---|
-| `dist/soc-log-anonymizer-gui/…` | `packaging/soc_log_anonymizer_gui.spec` | GUI-папка (exe + DLL) |
-| `dist/soc-log-anonymizer-cli/…` | `packaging/soc_log_anonymizer_cli.spec` | CLI-папка |
+| `dist/soc-log-anonymizer-gui.exe` | `packaging/soc_log_anonymizer_gui_onefile.spec` | GUI, без консольного окна |
+| `dist/soc-log-anonymizer-cli.exe` | `packaging/soc_log_anonymizer_cli_onefile.spec` | CLI с консолью |
 
 ```bat
 packaging\build_windows.bat
 ```
 
-Раздавайте **всю папку** (или zip). Старт почти мгновенный: нет распаковки
-во `%TEMP%` при каждом запуске.
+В свойствах файла Windows: **версия**, описание и **иконка**.
 
-## Опционально: `--onefile` (один .exe)
+Рядом с exe можно положить `soc_log_anonymizer.json` (скрипт копирует
+образец в `dist\`).
 
-Удобно копировать одним файлом, но **холодный старт медленный** (особенно
-с Windows Defender): bootloader каждый раз распаковывает архив во временную
-папку.
+## Опционально: `--onedir` (папка, быстрее старт)
 
 ```bat
-packaging\build_windows.bat /onefile
+packaging\build_windows.bat /onedir
 ```
 
 | Артефакт | Spec |
 |---|---|
-| `dist/soc-log-anonymizer-gui.exe` | `packaging/soc_log_anonymizer_gui_onefile.spec` |
-| `dist/soc-log-anonymizer-cli.exe` | `packaging/soc_log_anonymizer_cli_onefile.spec` |
+| `dist/soc-log-anonymizer-gui/…` | `packaging/soc_log_anonymizer_gui.spec` |
+| `dist/soc-log-anonymizer-cli/…` | `packaging/soc_log_anonymizer_cli.spec` |
+
+Раздавайте всю папку. Старт быстрее: нет распаковки во `%TEMP%` при каждом запуске.
 
 Вручную:
 
 ```bat
 pip install pyinstaller
-pyinstaller packaging\soc_log_anonymizer_gui.spec
-pyinstaller packaging\soc_log_anonymizer_cli.spec
+pyinstaller packaging\soc_log_anonymizer_gui_onefile.spec
+pyinstaller packaging\soc_log_anonymizer_cli_onefile.spec
 ```
-
-В свойствах файла Windows: **версия**, описание и **иконка**.
-
-Рядом с exe можно положить `soc_log_anonymizer.json` (скрипт копирует
-образец в `dist\` и в onedir-папки).
 
 ## SmartScreen / Defender
 
-Бинарники без подписи часто помечаются SmartScreen — это нормально
+Onefile-бинарники без подписи часто помечаются SmartScreen — это нормально
 для PyInstaller.
 
 1. **Authenticode** — подпишите exe корпоративным сертификатом
    (`signtool sign /fd SHA256 ...`).
 2. **UPX отключён** в spec намеренно (меньше ложных срабатываний AV).
 3. При внутреннем распространении добавьте hash/версию в каталог ПО SOC.
-4. Onefile + Defender = долгий каждый запуск; для SOC-рабочих мест
-   предпочтителен onedir.
 
-Конфиг/соль/mapping храните **рядом с exe** или в AppData — не во
-временном `_MEIPASS` (onefile).
+Первый запуск onefile чуть медленнее: архив распаковывается во временную
+папку. Конфиг/соль/mapping храните **рядом с exe** или в AppData — не во
+временном `_MEIPASS`.
 
 ## Куда класть конфиг и соль
 
@@ -96,11 +91,11 @@ soc-log-anonymizer-cli.exe anonymize -i huge.log -o clean.log --salt-file salt.t
 
 ## Обновление версии
 
-1. Замените папку `soc-log-anonymizer-gui\` (или onefile `.exe`) новой сборкой.
+1. Замените `soc-log-anonymizer-gui.exe` новой сборкой.
 2. Сохраните локальный `soc_log_anonymizer.json` / `portable.flag` / соль.
 3. Mapping от старой версии обычно совместим (`schema_version`).
 
 ## CI
 
-GitHub Actions job `pyinstaller-windows` собирает **onefile** (`build_windows.bat /onefile`)
-для удобной раздачи одним файлом. Локально по умолчанию — **onedir**.
+GitHub Actions job `pyinstaller-windows` собирает **onefile** GUI+CLI и
+публикует zip-артефакты.

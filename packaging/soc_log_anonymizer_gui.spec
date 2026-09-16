@@ -1,12 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller --onedir GUI build (default for Windows distribution).
-
-Faster cold start than onefile: no extract-to-%TEMP% on every launch.
+PyInstaller --onedir GUI build (optional; faster cold start than onefile).
 
 Usage (repo root):
 
-    packaging\\build_windows.bat
+    packaging\\build_windows.bat /onedir
     # or: pyinstaller packaging/soc_log_anonymizer_gui.spec
 
 Result: dist/soc-log-anonymizer-gui/soc-log-anonymizer-gui.exe

@@ -81,14 +81,21 @@ if defined ONEDIR (
 )
 
 if defined DO_GUI (
-  echo === Building GUI (onefile) ===
-  if defined ONEDIR echo === Building GUI (onedir) ===
+  if defined ONEDIR (
+    echo === Building GUI (onedir) ===
+  ) else (
+    echo === Building GUI (onefile) ===
+  )
   python -m PyInstaller %PI_FLAGS% %GUI_SPEC%
   if errorlevel 1 exit /b 1
 )
 
 if defined DO_CLI (
-  echo === Building CLI ===
+  if defined ONEDIR (
+    echo === Building CLI (onedir) ===
+  ) else (
+    echo === Building CLI (onefile) ===
+  )
   python -m PyInstaller %PI_FLAGS% %CLI_SPEC%
   if errorlevel 1 exit /b 1
 )
