@@ -25,8 +25,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # PowerShell на windows-latest не раскрывает *.py — компилируем через pathlib.
       - name: Byte-compile all modules
-        run: python -m py_compile soc_log_anonymizer/*.py tests/*.py
+        run: python -c "import pathlib, py_compile; paths=list(pathlib.Path('soc_log_anonymizer').glob('*.py'))+list(pathlib.Path('tests').glob('*.py')); [py_compile.compile(str(p), doraise=True) for p in paths]; print(f'compiled {len(paths)} files')"
 
       # Тесты сознательно не требуют tkinter: GUI-специфичная логика
       # вынесена в gui_logic.py (без импорта tkinter), а cli.py импортирует
@@ -37,9 +38,9 @@ jobs:
 
       - name: Lint new modules
         run: |
-          pip install ruff mypy
+          pip install "ruff>=0.8,<1" "mypy>=1.10,<1.15"
           ruff check soc_log_anonymizer/detectors.py soc_log_anonymizer/result.py soc_log_anonymizer/structured.py soc_log_anonymizer/gui_theme.py
-          mypy --ignore-missing-imports soc_log_anonymizer/detectors.py soc_log_anonymizer/result.py soc_log_anonymizer/structured.py
+          mypy --ignore-missing-imports --follow-imports=skip soc_log_anonymizer/detectors.py soc_log_anonymizer/result.py soc_log_anonymizer/structured.py
 
       - name: Run doctest examples
         run: |

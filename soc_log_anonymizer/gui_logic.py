@@ -3,7 +3,7 @@ GUI logic kept free from tkinter imports so it can be unit-tested in headless CI
 """
 
 import re
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Pattern, Tuple
 
 MIN_SALT_LEN = 16
 
@@ -201,6 +201,24 @@ MAX_DIFF_TOKENS = 200_000
 
 _TOKEN_RE = re.compile(r"\w+|[^\w\s]|\s+")
 
+# Подсветка по ключам mapping_table не должна цеплять чужие токены:
+# «admin» внутри allowlist-значения «administrator», «10.0.0.5» в начале
+# «10.0.0.50». Граница — не буква/цифра/_ с обеих сторон значения.
+_VALUE_EDGE = r"A-Za-z0-9_"
+
+
+def value_search_pattern(values: Iterable[str]) -> Optional[re.Pattern]:
+    """Один alternation-регэксп по значениям с границами токена.
+
+    Длинные ключи первыми: если в таблице есть и «admin», и «administrator»,
+    матчится целое более длинное значение, а не префикс.
+    """
+    keys = sorted({str(v) for v in values if v}, key=len, reverse=True)
+    if not keys:
+        return None
+    body = "|".join(re.escape(k) for k in keys)
+    return re.compile(rf"(?<![{_VALUE_EDGE}])(?:{body})(?![{_VALUE_EDGE}])")
+
 
 def merge_spans(spans: List[Tuple[int, int]], gap: int = 0) -> List[Tuple[int, int]]:
     """Схлопывает пересекающиеся и вплотную идущие диапазоны."""
@@ -235,10 +253,9 @@ def typed_value_spans(text: str, types: Dict[str, str],
     """
     if not text:
         return []
-    keys = sorted({str(k) for k in types if k}, key=len, reverse=True)
-    if not keys:
+    pattern = value_search_pattern(types)
+    if pattern is None:
         return []
-    pattern = re.compile("|".join(re.escape(k) for k in keys))
     return [(m.start(), m.end(), types.get(m.group(0), default_type))
             for m in pattern.finditer(text)]
 
@@ -251,7 +268,8 @@ def changed_value_spans(text: str, values: Iterable[str]) -> List[Tuple[int, int
 
     Длинные значения проверяются первыми: иначе "10.0.0.5" подсветил бы
     начало "10.0.0.50", и диапазон получился бы короче реального
-    заменённого значения.
+    заменённого значения. Границы токена не дают «admin» подсветить
+    allowlist-значение «administrator».
 
     >>> changed_value_spans("src=10.0.0.1 ok", ["10.0.0.1"])
     [(4, 12)]
@@ -260,10 +278,9 @@ def changed_value_spans(text: str, values: Iterable[str]) -> List[Tuple[int, int
     """
     if not text:
         return []
-    keys = sorted({str(v) for v in values if v}, key=len, reverse=True)
-    if not keys:
+    pattern = value_search_pattern(values)
+    if pattern is None:
         return []
-    pattern = re.compile("|".join(re.escape(k) for k in keys))
     return merge_spans([(m.start(), m.end()) for m in pattern.finditer(text)])
 
 

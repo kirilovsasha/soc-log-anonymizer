@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed GUI highlight falsely marking allowlisted tokens (e.g. `administrator`) when a shorter mapped value like `admin` was a substring.
 - Compacted the GUI header into a single toolbar row; secondary actions live under «Ещё», theme/font/sync under «Вид».
 - `org_name` is config-only (toolbar field removed); Copy result is on the main toolbar.
 - Split GUI into `gui_constants`, `gui_layout`, `gui_profiles`, `gui_diff_html` modules.

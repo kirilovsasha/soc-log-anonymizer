@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, List, Optional, Tuple
+from collections.abc import Callable
 
 _CEF_RE = re.compile(
     r"^(?P<prefix>.*?)(?P<head>CEF:\d+(?:\|[^|]*){6})\|(?P<ext>.*)$"
@@ -24,7 +24,7 @@ def join_continued_lines(text: str) -> str:
     lines = text.splitlines(keepends=True)
     if len(lines) <= 1:
         return text
-    out: List[str] = []
+    out: list[str] = []
     buf = ""
     buf_nl = ""
     for line in lines:
@@ -59,21 +59,21 @@ def join_continued_lines(text: str) -> str:
     return "".join(out)
 
 
-def parse_cef(line: str) -> Optional[Tuple[str, str, str]]:
+def parse_cef(line: str) -> tuple[str, str, str] | None:
     match = _CEF_RE.match(line.rstrip("\r\n"))
     if not match:
         return None
     return match.group("prefix"), match.group("head"), match.group("ext")
 
 
-def parse_leef(line: str) -> Optional[Tuple[str, str, str]]:
+def parse_leef(line: str) -> tuple[str, str, str] | None:
     match = _LEEF_RE.match(line.rstrip("\r\n"))
     if not match:
         return None
     return match.group("prefix"), match.group("head"), match.group("ext")
 
 
-def parse_rfc5424_host(line: str) -> Optional[Tuple[str, str, str]]:
+def parse_rfc5424_host(line: str) -> tuple[str, str, str] | None:
     match = _RFC5424_RE.match(line.rstrip("\r\n"))
     if not match:
         return None

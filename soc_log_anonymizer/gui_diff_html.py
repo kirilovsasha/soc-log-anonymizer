@@ -4,21 +4,17 @@ from __future__ import annotations
 
 import difflib
 import html
-import re
 from datetime import datetime
 from typing import Callable, Dict, Optional, Pattern
 
+from .gui_logic import value_search_pattern
 from .gui_theme import TAG_COLORS_DARK, _TYPE_LEGEND_RU, pseudonym_type
 
 HTML_DIFF_CONTEXT_LINES = 3
 
 
 def build_value_regex(values) -> Optional[Pattern[str]]:
-    values = [v for v in values if v]
-    if not values:
-        return None
-    escaped = sorted((re.escape(v) for v in values), key=len, reverse=True)
-    return re.compile("|".join(escaped))
+    return value_search_pattern(values)
 
 
 def render_html_line(

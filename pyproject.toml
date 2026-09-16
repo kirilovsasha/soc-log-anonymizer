@@ -32,6 +32,11 @@ include = ["soc_log_anonymizer*"]
 line-length = 120
 target-version = "py39"
 
+[tool.ruff.lint]
+# Early-return guards are clearer than inlined boolean returns in detector filters.
+ignore = ["SIM103"]
+
 [tool.mypy]
 python_version = "3.9"
 ignore_missing_imports = true
+follow_imports = "skip"

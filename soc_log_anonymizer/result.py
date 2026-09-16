@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List
 
 
 @dataclass(frozen=True)
@@ -15,8 +14,8 @@ class AnonymizeResult:
     """
 
     text: str
-    stats: Dict[str, int] = field(default_factory=dict)
-    mapping: Dict[str, str] = field(default_factory=dict)
-    issues: List[str] = field(default_factory=list)
+    stats: dict[str, int] = field(default_factory=dict)
+    mapping: dict[str, str] = field(default_factory=dict)
+    issues: list[str] = field(default_factory=list)
     safe: bool = True
-    metrics: Dict[str, int] = field(default_factory=dict)
+    metrics: dict[str, int] = field(default_factory=dict)

@@ -1,6 +1,6 @@
 """Theme constants and pseudonym-type colors for the GUI (no tkinter)."""
 
-from typing import Dict, Tuple
+from __future__ import annotations
 
 PALETTE_LIGHT = {
     "bg": "#eef0f4", "surface": "#ffffff", "surface_alt": "#f5f6fa", "border": "#e1e4ea",
@@ -26,7 +26,7 @@ PALETTE_DARK = {
     "disabled_bg": "#2b2f3a", "disabled_fg": "#6b7280",
 }
 
-TAG_COLORS_LIGHT: Dict[str, Tuple[str, str]] = {
+TAG_COLORS_LIGHT: dict[str, tuple[str, str]] = {
     "IP":      ("#dbeafe", "#1e40af"),
     "IP_NET":  ("#c7d2fe", "#3730a3"),
     "EMAIL":   ("#dcfce7", "#166534"),
@@ -44,7 +44,7 @@ TAG_COLORS_LIGHT: Dict[str, Tuple[str, str]] = {
     "VALUE":   ("#e0e7ff", "#3730a3"),
 }
 
-TAG_COLORS_DARK: Dict[str, Tuple[str, str]] = {
+TAG_COLORS_DARK: dict[str, tuple[str, str]] = {
     "IP":      ("#1e3a8a", "#bfdbfe"),
     "IP_NET":  ("#312e81", "#c7d2fe"),
     "EMAIL":   ("#14532d", "#bbf7d0"),

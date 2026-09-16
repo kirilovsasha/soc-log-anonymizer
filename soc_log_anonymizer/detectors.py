@@ -8,7 +8,7 @@ Vendor-specific *profiles* are intentionally out of scope.
 from __future__ import annotations
 
 import re
-from typing import Dict, Iterable
+from collections.abc import Iterable
 
 # Public detector families (documentation / UI filters).
 MASKABLE_FAMILIES = (
@@ -16,7 +16,7 @@ MASKABLE_FAMILIES = (
     "HASH", "JWT", "SECRET", "URL", "TOKEN",
 )
 
-TAG_FAMILY: Dict[str, str] = {
+TAG_FAMILY: dict[str, str] = {
     "IP": "IP",
     "IP_NET": "IP",
     "EMAIL": "EMAIL",

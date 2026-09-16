@@ -31,6 +31,11 @@ class TestDiffHtmlHelpers(unittest.TestCase):
         match = pattern.search("x 10.0.0.50 y")
         self.assertEqual(match.group(0), "10.0.0.50")
 
+    def test_build_value_regex_skips_substring_inside_token(self):
+        pattern = build_value_regex(["admin"])
+        self.assertIsNone(pattern.search("AccountName=administrator"))
+        self.assertEqual(pattern.search("user=admin").group(0), "admin")
+
     def test_build_diff_html_empty_change(self):
         doc = build_diff_html("same", "same", {}, {}, org_name="bank")
         self.assertIn("Изменений нет", doc)

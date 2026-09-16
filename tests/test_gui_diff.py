@@ -29,6 +29,19 @@ class ChangedValueSpansTest(unittest.TestCase):
         spans = changed_value_spans(text, ["10.0.0.5", "10.0.0.50"])
         self.assertEqual([text[a:b] for a, b in spans], ["10.0.0.5", "10.0.0.50"])
 
+    def test_short_value_does_not_highlight_inside_longer_token(self):
+        # Allowlist «administrator» остаётся в тексте; «admin» из mapping
+        # не должен подсвечивать его префикс как «замаскированное».
+        text = "AccountName=administrator user=admin"
+        spans = changed_value_spans(text, ["admin"])
+        self.assertEqual([text[a:b] for a, b in spans], ["admin"])
+        self.assertNotIn("administrator", "".join(text[a:b] for a, b in spans))
+
+    def test_ip_prefix_alone_does_not_match_longer_ip(self):
+        text = "src=10.0.0.50"
+        spans = changed_value_spans(text, ["10.0.0.5"])
+        self.assertEqual(spans, [])
+
     def test_empty_inputs(self):
         self.assertEqual(changed_value_spans("", ["x"]), [])
         self.assertEqual(changed_value_spans("text", []), [])
