@@ -484,5 +484,59 @@ class TestOrgAliasCanonicalization(unittest.TestCase):
         self.assertEqual(restored, "example reported an issue")
 
 
+class TestPathsAreNotMasked(unittest.TestCase):
+    """Пути оставляем как есть: маскируются только логин в профиле и ORG."""
+
+    def setUp(self):
+        self.a = SOCLogAnonymizer(salt="test-salt", org_name="acme")
+
+    def test_protocol_version_and_cipher_stay(self):
+        line = "client HTTP/1.1 IKEv2/AES256 to vpn.acme.local"
+        out = self.a.anonymize_text(line)
+        self.assertIn("HTTP/1.1", out)
+        self.assertIn("IKEv2/AES256", out)
+        self.assertNotIn("[PATH_", out)
+
+    def test_iso_date_with_slashes_stays(self):
+        line = "event at 2026/09/16 10:22:01"
+        out = self.a.anonymize_text(line)
+        self.assertIn("2026/09/16", out)
+        self.assertNotIn("[PATH_", out)
+
+    def test_unix_log_path_stays(self):
+        line = "tail /var/log/auth.log"
+        out = self.a.anonymize_text(line)
+        self.assertIn("/var/log/auth.log", out)
+        self.assertNotIn("[PATH_", out)
+
+    def test_windows_system_path_is_not_user(self):
+        line = r"loaded C:\Windows\System32\drivers\etc\hosts"
+        out = self.a.anonymize_text(line)
+        self.assertIn(r"C:\Windows\System32\drivers\etc\hosts", out)
+        self.assertNotIn("[USER_", out)
+        self.assertNotIn("[PATH_", out)
+
+    def test_home_directory_username_is_masked(self):
+        line = r"open C:\Users\jdoe\Documents\report.txt and /home/jdoe/.ssh/id_rsa"
+        out = self.a.anonymize_text(line)
+        self.assertNotIn("jdoe", out)
+        self.assertIn(r"C:\Users\[USER_", out)
+        self.assertIn("/home/[USER_", out)
+        self.assertIn(r"\Documents\report.txt", out)
+        self.assertIn("/.ssh/id_rsa", out)
+
+    def test_windows_domain_user_still_masked(self):
+        out = self.a.anonymize_text(r"login CORP\jdoe")
+        self.assertNotIn(r"CORP\jdoe", out)
+        self.assertIn("[USER_", out)
+
+    def test_verify_does_not_flag_protocol_slash(self):
+        line = "HTTP/1.1 GET /index.html IKEv2/AES256 2026/09/16"
+        out = self.a.anonymize_text(line)
+        safe, issues = self.a.verify(out)
+        self.assertTrue(safe, issues)
+        self.assertFalse(any("PATH" in issue for issue in issues))
+
+
 if __name__ == "__main__":
     unittest.main()
