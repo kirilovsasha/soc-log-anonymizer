@@ -41,6 +41,7 @@ jobs:
         run: python -m unittest discover -s tests -v
 
       - name: Lint and typecheck package
+        shell: bash
         run: |
           pip install -e ".[dev]"
           ruff check soc_log_anonymizer

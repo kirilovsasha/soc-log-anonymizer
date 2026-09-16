@@ -8,6 +8,10 @@ build/
 dist/
 *.egg-info/
 *.pyz
+*.zip
+soc-log-anonymizer-gui/
+soc-log-anonymizer-cli/
+soc-log-anonymizer-*.exe
 
 # Virtual environments
 venv/
