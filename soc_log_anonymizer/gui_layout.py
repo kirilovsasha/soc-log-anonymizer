@@ -80,22 +80,6 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
     )
     app.btn_undo.pack(side=tk.LEFT)
 
-    ttk.Separator(bar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=14, pady=2)
-
-    mid = ttk.Frame(bar, style="Card.TFrame")
-    mid.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-    ttk.Label(mid, text="Соль", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
-    app.entry_salt = ttk.Entry(mid, width=22, font=(FONT_UI, 9))
-    app.entry_salt.insert(0, secrets.token_hex(16))
-    app.entry_salt.pack(side=tk.LEFT)
-    vcmd = (app.root.register(app._validate_salt_live), "%P")
-    app.entry_salt.configure(validate="key", validatecommand=vcmd)
-    ttk.Button(
-        mid, text=ICON_DICE, style="IconGhost.TButton", width=3,
-        command=app.generate_new_salt,
-    ).pack(side=tk.LEFT)
-
     right = ttk.Frame(bar, style="Card.TFrame")
     right.pack(side=tk.RIGHT)
 
@@ -104,13 +88,6 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
     more_menu.add_command(label=f"{ICON_SAVE}  Сохранить результат", command=app.save_file)
     more_menu.add_command(label="Деанонимизировать", command=app.deanonymize_text)
     more_menu.add_command(label="Очистить всё", command=app.clear_all)
-    more_menu.add_separator()
-    format_menu = tk.Menu(more_menu, tearoff=False)
-    for fmt in ("text", "json", "csv"):
-        format_menu.add_radiobutton(
-            label=fmt, value=fmt, variable=app.result_format,
-        )
-    more_menu.add_cascade(label="Формат результата", menu=format_menu)
     more_menu.add_separator()
     more_menu.add_command(label=f"{ICON_DIFF} HTML Diff отчёт", command=app.export_diff_html)
     more_menu.add_command(label=f"{ICON_STATS} Статистика", command=app.show_stats)
@@ -323,6 +300,30 @@ def _build_config_tab(app: "AnonymizerGUI", tab_config: ttk.Frame) -> None:
                command=app.validate_config_editor).pack(side=tk.LEFT, padx=6)
     ttk.Button(config_actions, text="Сбросить", style="Danger.TButton",
                command=app.reset_config_editor).pack(side=tk.LEFT, padx=6)
+
+    # Session salt (not part of the JSON config file — runtime secret)
+    salt_outer, salt_card = app._card(tab_config)
+    salt_outer.pack(fill=tk.X, padx=8, pady=(0, 6))
+    salt_header = ttk.Frame(salt_card, style="Card.TFrame")
+    salt_header.pack(fill=tk.X, padx=12, pady=(10, 4))
+    ttk.Label(salt_header, text="Соль", style="Section.TLabel").pack(side=tk.LEFT)
+    ttk.Label(
+        salt_header,
+        text="Секрет сессии для псевдонимов. Не сохраняется в JSON-конфиг.",
+        style="Muted.TLabel",
+    ).pack(side=tk.LEFT, padx=12)
+
+    salt_body = ttk.Frame(salt_card, style="Card.TFrame")
+    salt_body.pack(fill=tk.X, padx=12, pady=(0, 10))
+    app.entry_salt = ttk.Entry(salt_body, width=44, font=(FONT_UI, 9))
+    app.entry_salt.insert(0, secrets.token_hex(16))
+    app.entry_salt.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
+    vcmd = (app.root.register(app._validate_salt_live), "%P")
+    app.entry_salt.configure(validate="key", validatecommand=vcmd)
+    ttk.Button(
+        salt_body, text=ICON_DICE, style="IconGhost.TButton", width=3,
+        command=app.generate_new_salt,
+    ).pack(side=tk.LEFT)
 
     # Allowlist editor (human-friendly)
     allow_outer, allow_card = app._card(tab_config)

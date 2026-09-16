@@ -4,7 +4,7 @@ import sys
 import threading
 import tkinter as tk
 from collections import deque
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .anonymizer import SOCLogAnonymizer
 from .config import AnonymizerConfig, find_default_config_path
@@ -70,7 +70,9 @@ class AnonymizerGUI(
             logger.info("Автоматически загружен конфиг: %s", self._config_path)
         else:
             self.config = AnonymizerConfig()
-        self.anonymizer: Optional[SOCLogAnonymizer] = SOCLogAnonymizer(config=self.config)
+        # Lazy: создаётся при первой анонимизации. Старт GUI не должен
+        # платить PBKDF2 (сотни тысяч итераций) за «пустой» инстанс.
+        self.anonymizer: Optional[SOCLogAnonymizer] = None
 
         # История для отмены последней операции (undo)
         self._undo_stack: deque = deque(maxlen=UNDO_HISTORY_SIZE)
@@ -95,13 +97,13 @@ class AnonymizerGUI(
         # предыдущий результат) — устаревший проход обязан прекратиться,
         # иначе он дорисует теги от уже неактуального diff'а.
         self._diff_render_token = 0
+        self._legend_counts: Dict[str, int] = {}
         self._last_file_report: List[dict] = []
 
         # Тема и размер шрифта (сохраняются в gui_state)
         self.dark_mode = tk.BooleanVar(value=False)
         self.font_size = tk.IntVar(value=DEFAULT_FONT_SIZE)
         self.sync_scroll_var = tk.BooleanVar(value=True)
-        self.result_format = tk.StringVar(value="text")
         self.autosave_drafts = tk.BooleanVar(
             value=bool(self._gui_state.get("autosave_drafts", True))
         )

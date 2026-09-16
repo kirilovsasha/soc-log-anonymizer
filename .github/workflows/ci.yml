@@ -168,7 +168,7 @@ jobs:
         run: pip install pyinstaller
       - name: Build GUI + CLI (onefile)
         shell: cmd
-        run: packaging\build_windows.bat
+        run: packaging\build_windows.bat /onefile
       - name: Verify executables
         shell: pwsh
         run: |

@@ -501,28 +501,6 @@ def truncate_display_text(text: str, limit: int) -> Tuple[str, bool]:
     return text[:head] + marker + text[-tail:], True
 
 
-def format_result_payload(text: str, output_format: str) -> Tuple[str, str]:
-    """Serialize GUI output and return (content, recommended extension)."""
-    import csv
-    import io
-    import json
-
-    fmt = str(output_format or "text").lower()
-    if fmt == "json":
-        try:
-            return json.dumps(json.loads(text), ensure_ascii=False, indent=2), ".json"
-        except (TypeError, ValueError):
-            return json.dumps({"text": text}, ensure_ascii=False, indent=2), ".json"
-    if fmt == "csv":
-        buffer = io.StringIO()
-        writer = csv.writer(buffer, lineterminator="\n")
-        writer.writerow(["line_number", "text"])
-        for index, line in enumerate(text.splitlines(), 1):
-            writer.writerow([index, line])
-        return buffer.getvalue(), ".csv"
-    return text, ".log"
-
-
 def format_scan_report(findings: List[dict], limit: int = 500) -> str:
     """Human-readable scan listing (no masking)."""
     if not findings:

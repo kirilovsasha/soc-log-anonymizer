@@ -18,6 +18,11 @@ logger = logging.getLogger("soc_log_anonymizer")
 
 
 class GuiDiffMixin:
+    # Пакетная отрисовка тегов через root.after — иначе тысячи tag_add
+    # подряд блокируют event loop на больших логах.
+    _HIGHLIGHT_BATCH_SIZE = 300
+    _HIGHLIGHT_RENDER_LIMIT = 5_000
+
     def _pane_text(self, widget: tk.Text) -> str:
         """Ровно то, что лежит в виджете, без .strip() и без подстановки
         полного (неусечённого) текста вместо показанного.

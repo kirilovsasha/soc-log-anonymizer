@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Iterable, Optional, Tuple
 
 from .gui_constants import FONT_MONO, GUI_DISPLAY_CHAR_LIMIT, GUI_SIDECAR_AUTO_MB
-from .gui_logic import format_result_payload, format_size_warning, truncate_display_text
+from .gui_logic import format_size_warning, truncate_display_text
 from .gui_theme import HIGHLIGHT_TAG_NAMES
 from .io_utils import format_size_mb, read_file_auto_encoding
 
@@ -440,16 +440,14 @@ class GuiFilesMixin:
         if not result_text:
             messagebox.showwarning("Предупреждение", "Нет данных для сохранения!")
             return
-        content, extension = format_result_payload(result_text, self.result_format.get())
         file_path = filedialog.asksaveasfilename(
-            defaultextension=extension,
-            filetypes=[("Text files", "*.log *.txt"), ("JSON files", "*.json"),
-                       ("CSV files", "*.csv"), ("All files", "*.*")]
+            defaultextension=".log",
+            filetypes=[("Text files", "*.log *.txt"), ("All files", "*.*")]
         )
         if file_path:
             try:
                 with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(content)
+                    f.write(result_text)
                 messagebox.showinfo("Успех", "Файл успешно сохранен!")
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {e}")

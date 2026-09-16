@@ -12,7 +12,6 @@ import threading
 import tkinter as tk
 from tkinter import messagebox
 
-from .anonymizer import SOCLogAnonymizer
 from .gui_constants import (
     AUTOSAVE_INTERVAL_MS,
     DEFAULT_FONT_SIZE,
@@ -221,7 +220,7 @@ class GuiStateMixin:
     def _session_timeout_ui(self):
         if self.anonymizer and self.anonymizer.mapping_table:
             self.anonymizer.clear_sensitive_data()
-            self.anonymizer = SOCLogAnonymizer(config=self.config)
+            self.anonymizer = None
             self.refresh_mapping_table()
             self._set_status("Сессия истекла — таблица соответствия очищена", "Warning")
             logger.info("Сессия истекла по таймауту — mapping-таблица очищена")
