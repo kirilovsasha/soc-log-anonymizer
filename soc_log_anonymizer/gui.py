@@ -1,16 +1,13 @@
 import atexit
 import base64
 import csv
-import difflib
 import glob
-import html
 import json
 import logging
 import os
 import re
 import secrets
 import sys
-from datetime import datetime
 import tempfile
 import threading
 import tkinter as tk
@@ -54,51 +51,31 @@ from .gui_logic import (
     validate_regex_pattern,
     mapping_rows_filtered,
 )
+from .gui_constants import (
+    AUTOSAVE_INTERVAL_MS,
+    DEFAULT_FONT_SIZE,
+    FONT_MONO,
+    FONT_UI,
+    GUI_DISPLAY_CHAR_LIMIT,
+    GUI_STATE_FILENAME,
+    ICON_TAB_CONFIG,
+    ICON_WARN,
+    MAX_FONT_SIZE,
+    MIN_FONT_SIZE,
+    PLACEHOLDER_FG,
+    UNDO_HISTORY_SIZE,
+    _STATUS_KINDS,
+)
+from .gui_diff_html import build_diff_html as _build_diff_html_doc
+from .gui_layout import build_main_ui
+from .gui_profiles import (
+    ALLOWLIST_PRESETS,
+    apply_source_profile,
+    merge_lists,
+)
 from .io_utils import format_size_mb, read_file_auto_encoding
 
 logger = logging.getLogger("soc_log_anonymizer")
-
-UNDO_HISTORY_SIZE = 10
-MIN_FONT_SIZE = 8
-MAX_FONT_SIZE = 18
-DEFAULT_FONT_SIZE = 10
-AUTOSAVE_INTERVAL_MS = 30_000
-GUI_DISPLAY_CHAR_LIMIT = 1_000_000
-GUI_STATE_FILENAME = "soc_log_anonymizer_gui_state.json"
-
-FONT_UI = "Segoe UI"
-FONT_MONO = "Consolas"
-
-PLACEHOLDER_FG = "_placeholder_"  # маркер-состояние, см. _add_placeholder
-
-# Статусные "чипы" (badge) для status_label: имя_состояния -> (фон, текст).
-# Определяются относительно палитры в _configure_styles().
-_STATUS_KINDS = ("Idle", "Info", "Success", "Danger", "Warning", "Purple", "Muted")
-
-# Иконки для кнопок и меток — сознательно ограничены НАБОРОМ ОДИНОЧНЫХ
-# кодовых точек с эмодзи-представлением по умолчанию (без ZWJ-последова-
-# тельностей и без вариационного селектора U+FE0F). Составные/VS16-эмодзи
-# (например "🗺️", "⚙️", "⚠️") на части шрифтов Windows рендерятся
-# непредсказуемо — то как два глифа, то как "квадратик", из-за чего
-# tk-виджет неверно считает ширину контента и обрезает подпись кнопки.
-ICON_OPEN = "📁"
-ICON_RUN = "⚡"
-ICON_DEANON = "🔄"
-ICON_UNDO = "↩"
-ICON_COPY = "📋"
-ICON_SAVE = "💾"
-ICON_DIFF = "🔀"
-ICON_STATS = "📊"
-ICON_CLEAR = "🗑"
-ICON_DICE = "🎲"
-ICON_MOON = "🌙"
-ICON_SEARCH = "🔍"
-ICON_EXPORT = "📤"
-ICON_LOCK = "🔐"
-ICON_WARN = "⚠"
-ICON_TAB_LOG = "📄"
-ICON_TAB_MAP = "🗂"
-ICON_TAB_CONFIG = "⚙"
 
 
 class AnonymizerGUI:
@@ -519,7 +496,11 @@ class AnonymizerGUI:
         menu = tk.Menu(self.root)
         file_menu = tk.Menu(menu, tearoff=False)
         file_menu.add_command(label="Открыть файл", command=self.open_file, accelerator=self._accelerator_for("open_file"))
+        file_menu.add_command(label="Открыть папку…", command=self.open_folder)
         file_menu.add_command(label="Сохранить результат", command=self.save_file, accelerator=self._accelerator_for("save_file"))
+        file_menu.add_separator()
+        file_menu.add_command(label="HTML Diff отчёт", command=self.export_diff_html)
+        file_menu.add_command(label="Статистика", command=self.show_stats)
         file_menu.add_separator()
         file_menu.add_command(label="Выход", command=self._on_close)
         edit_menu = tk.Menu(menu, tearoff=False)
@@ -801,286 +782,7 @@ class AnonymizerGUI:
         return outer, inner
 
     def _build_ui(self):
-        main = ttk.Frame(self.root, style="App.TFrame")
-        main.pack(fill=tk.BOTH, expand=True)
-
-        # ---------------- Панель инструментов ----------------
-        toolbar_outer, toolbar = self._card(main)
-        toolbar_outer.pack(fill=tk.X, padx=8, pady=(8, 4))
-
-        controls = ttk.Notebook(toolbar)
-        controls.pack(fill=tk.X, padx=6, pady=6)
-
-        actions_tab = ttk.Frame(controls, style="Card.TFrame")
-        results_tab = ttk.Frame(controls, style="Card.TFrame")
-        session_tab = ttk.Frame(controls, style="Card.TFrame")
-        controls.add(actions_tab, text="Основные действия")
-        controls.add(results_tab, text="Результат и отчеты")
-        controls.add(session_tab, text="Параметры сессии")
-
-        primary_actions = ttk.Frame(actions_tab, style="Card.TFrame")
-        primary_actions.pack(fill=tk.X, padx=8, pady=8)
-        secondary_actions = ttk.Frame(results_tab, style="Card.TFrame")
-        secondary_actions.pack(fill=tk.X, padx=8, pady=8)
-        ttk.Label(secondary_actions, text="Формат:", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
-        self.result_format = ttk.Combobox(
-            secondary_actions, values=("text", "json", "csv"), state="readonly", width=8)
-        self.result_format.set("text")
-        self.result_format.pack(side=tk.LEFT, padx=(0, 8))
-
-        self.btn_open = ttk.Button(primary_actions, text=f"{ICON_OPEN}  Открыть", style="Ghost.TButton",
-                                    command=self.open_file)
-        self.btn_open.pack(side=tk.LEFT, padx=(0, 6))
-
-        self.btn_open_folder = ttk.Button(primary_actions, text="📁  Открыть папку", style="Ghost.TButton",
-                                          command=self.open_folder)
-        self.btn_open_folder.pack(side=tk.LEFT, padx=6)
-
-        self.btn_process = ttk.Button(primary_actions, text=f"{ICON_RUN}  Анонимизировать", style="Primary.TButton",
-                                       command=self.start_processing_thread)
-        self.btn_process.pack(side=tk.LEFT, padx=6)
-
-        self.btn_cancel = ttk.Button(primary_actions, text="Отменить обработку",
-                                     style="Danger.TButton", command=self.cancel_operation,
-                                     state=tk.DISABLED)
-        self.btn_cancel.pack(side=tk.LEFT, padx=6)
-
-        self.btn_deanonymize = ttk.Button(primary_actions, text=f"{ICON_DEANON}  Деанонимизировать",
-                                           style="Purple.TButton", command=self.deanonymize_text)
-        self.btn_deanonymize.pack(side=tk.LEFT, padx=6)
-
-        self.btn_undo = ttk.Button(primary_actions, text=f"{ICON_UNDO}  Отменить операцию (Ctrl+Alt+Z)",
-                                    style="Ghost.TButton",
-                                    command=self.undo_last, state=tk.DISABLED)
-        self.btn_undo.pack(side=tk.LEFT, padx=6)
-        ttk.Button(primary_actions, text=f"{ICON_CLEAR}  Очистить всё (Ctrl+L)", style="Danger.TButton",
-                   command=self.clear_all).pack(side=tk.LEFT, padx=6)
-
-        ttk.Button(secondary_actions, text=f"{ICON_COPY}  Копировать", style="Ghost.TButton",
-                   command=self.copy_result).pack(side=tk.LEFT, padx=6)
-        ttk.Button(secondary_actions, text=f"{ICON_SAVE}  Сохранить", style="Ghost.TButton",
-                   command=self.save_file).pack(side=tk.LEFT, padx=6)
-        ttk.Button(secondary_actions, text=f"{ICON_DIFF}  HTML Diff отчёт", style="Ghost.TButton",
-                   command=self.export_diff_html).pack(side=tk.LEFT, padx=6)
-        ttk.Button(secondary_actions, text=f"{ICON_STATS}  Статистика", style="Ghost.TButton",
-                   command=self.show_stats).pack(side=tk.LEFT, padx=6)
-        ttk.Button(secondary_actions, text="◀ Diff", style="Ghost.TButton",
-                   command=lambda: self._navigate_diff(-1)).pack(side=tk.LEFT, padx=6)
-        ttk.Button(secondary_actions, text="Diff ▶", style="Ghost.TButton",
-                   command=lambda: self._navigate_diff(1)).pack(side=tk.LEFT, padx=2)
-
-        settings_row = ttk.Frame(session_tab, style="Card.TFrame")
-        settings_row.pack(fill=tk.X, padx=8, pady=8)
-
-        ttk.Label(settings_row, text="Организация", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 6))
-        self.entry_org = ttk.Entry(settings_row, width=12, font=(FONT_UI, 9))
-        self.entry_org.insert(0, self.config.org_name)
-        self.entry_org.pack(side=tk.LEFT, padx=(0, 14))
-
-        ttk.Label(settings_row, text="Соль", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 6))
-        self.entry_salt = ttk.Entry(settings_row, width=22, font=(FONT_UI, 9))
-        self.entry_salt.insert(0, secrets.token_hex(16))
-        self.entry_salt.pack(side=tk.LEFT)
-        # Живая проверка энтропии соли: не блокирует ввод, только меняет
-        # стиль поля (см. _validate_salt_live).
-        vcmd = (self.root.register(self._validate_salt_live), "%P")
-        self.entry_salt.configure(validate="key", validatecommand=vcmd)
-
-        ttk.Button(settings_row, text=ICON_DICE, style="IconGhost.TButton", width=3,
-                   command=self.generate_new_salt).pack(side=tk.LEFT, padx=(4, 14))
-
-        self.dark_mode_chk = ttk.Checkbutton(settings_row, text=f"{ICON_MOON} Тёмная тема",
-                                              variable=self.dark_mode, command=self._apply_theme)
-        self.dark_mode_chk.pack(side=tk.LEFT, padx=(0, 14))
-
-        ttk.Label(settings_row, text="Шрифт", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
-        spin_font = ttk.Spinbox(settings_row, from_=MIN_FONT_SIZE, to=MAX_FONT_SIZE, width=3,
-                                 textvariable=self.font_size, command=self._apply_font_size)
-        spin_font.pack(side=tk.LEFT, padx=(0, 14))
-
-        self.sync_scroll_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(settings_row, text="Синхронный скролл", variable=self.sync_scroll_var
-                         ).pack(side=tk.LEFT)
-
-        status_bar = ttk.Frame(main, style="StatusBar.TFrame")
-        status_bar.pack(fill=tk.X, padx=12, pady=(0, 8))
-        ttk.Label(status_bar, text="СОСТОЯНИЕ", style="StatusBar.TLabel").pack(
-            side=tk.LEFT, padx=(12, 8), pady=8)
-        self.status_label = ttk.Label(status_bar, text="Готов к работе", style="StatusIdle.TLabel")
-        self.status_label.pack(side=tk.LEFT, pady=4)
-        self.progress = ttk.Progressbar(status_bar, orient=tk.HORIZONTAL, length=180,
-                                        mode="determinate", style="TProgressbar")
-        self.progress.pack(side=tk.RIGHT, padx=(10, 12), pady=8)
-        self.progress_label = ttk.Label(status_bar, text="0%", style="StatusBar.TLabel")
-        self.progress_label.pack(side=tk.RIGHT, padx=(0, 4))
-        ttk.Label(status_bar, text="Прогресс", style="StatusBar.TLabel").pack(
-            side=tk.RIGHT, padx=(0, 4))
-
-        # ---------------- Вкладки ----------------
-        self.notebook = ttk.Notebook(main)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
-
-        tab_logs = ttk.Frame(self.notebook, style="App.TFrame")
-        self.notebook.add(tab_logs, text=f"{ICON_TAB_LOG}  Редактор логов")
-
-        files_outer, files_card = self._card(tab_logs)
-        files_outer.pack(fill=tk.X, padx=4, pady=(4, 0))
-        files_header = ttk.Frame(files_card, style="Card.TFrame")
-        files_header.pack(fill=tk.X, padx=12, pady=(8, 3))
-        ttk.Label(files_header, text="ФАЙЛЫ В ОБРАБОТКЕ", style="Section.TLabel").pack(side=tk.LEFT)
-        self.files_count_label = ttk.Label(files_header, text="0 файлов", style="Muted.TLabel")
-        self.files_count_label.pack(side=tk.LEFT, padx=(12, 0))
-        ttk.Label(files_header, text="Порядок обработки сохраняется", style="Muted.TLabel").pack(side=tk.LEFT, padx=12)
-        files_bar = ttk.Frame(files_card, style="Card.TFrame")
-        files_bar.pack(fill=tk.X, padx=12, pady=(0, 9))
-        self.files_list = tk.Listbox(files_bar, height=2, exportselection=False,
-                                     relief=tk.FLAT, borderwidth=0, activestyle="none")
-        self.files_list.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
-        files_scroll = ttk.Scrollbar(files_bar, orient=tk.VERTICAL, command=self.files_list.yview)
-        self.files_list.configure(yscrollcommand=files_scroll.set)
-        files_scroll.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
-        ttk.Button(files_bar, text="Удалить файл", style="Ghost.TButton",
-                   command=self.remove_loaded_file).pack(side=tk.LEFT)
-        ttk.Button(files_bar, text="↑", width=3, style="IconGhost.TButton",
-                   command=lambda: self.move_loaded_file(-1)).pack(side=tk.LEFT, padx=2)
-        ttk.Button(files_bar, text="↓", width=3, style="IconGhost.TButton",
-                   command=lambda: self.move_loaded_file(1)).pack(side=tk.LEFT)
-
-        log_search = ttk.Frame(tab_logs, style="App.TFrame")
-        log_search.pack(fill=tk.X, padx=4, pady=(4, 0))
-        ttk.Label(log_search, text=f"{ICON_SEARCH} Поиск", style="Muted.TLabel").pack(
-            side=tk.LEFT, padx=(4, 6))
-        self.log_search_entry = ttk.Entry(log_search, width=32)
-        self.log_search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.log_search_entry.bind("<Return>", lambda e: self._find_in_logs(1))
-        self.log_search_target = ttk.Combobox(
-            log_search, values=("Input", "Output"), state="readonly", width=9)
-        self.log_search_target.set("Input")
-        self.log_search_target.pack(side=tk.LEFT, padx=6)
-        ttk.Button(log_search, text="Найти", style="Ghost.TButton",
-                   command=lambda: self._find_in_logs(1)).pack(side=tk.LEFT, padx=2)
-        ttk.Button(log_search, text="Назад", style="Ghost.TButton",
-                   command=lambda: self._find_in_logs(-1)).pack(side=tk.LEFT, padx=2)
-        ttk.Button(log_search, text="Diff Prev", style="Ghost.TButton",
-                   command=lambda: self._navigate_diff(-1)).pack(side=tk.LEFT, padx=2)
-        ttk.Button(log_search, text="Diff Next", style="Ghost.TButton",
-                   command=lambda: self._navigate_diff(1)).pack(side=tk.LEFT, padx=2)
-
-        tab_mapping = ttk.Frame(self.notebook, style="App.TFrame")
-        self.notebook.add(tab_mapping, text=f"{ICON_TAB_MAP}  Таблица соответствия")
-
-        tab_config = ttk.Frame(self.notebook, style="App.TFrame")
-        self.notebook.add(tab_config, text=f"{ICON_TAB_CONFIG}  Конфигурация")
-
-        # --- Вкладка "Редактор логов" ---
-        paned = ttk.PanedWindow(tab_logs, orient=tk.HORIZONTAL)
-        self.editor_paned = paned
-        paned.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-
-        left_outer, left_card = self._card(paned)
-        ttk.Label(left_card, text="Исходные логи / Ответ LLM (Input)", style="Heading.TLabel"
-                  ).pack(anchor="w", padx=12, pady=(10, 4))
-        self.txt_input, self.v_scroll_left, _ = self._create_scrolled_text(
-            left_card, lambda first, last: self._sync_yscroll(self.v_scroll_left, (self.txt_output,), first, last))
-        self.txt_input.bind("<Motion>", self._on_input_motion)
-        self.txt_input.bind("<Leave>", lambda e: self._hide_tooltip())
-        self.txt_input.bind("<<Modified>>", self._on_input_modified)
-        paned.add(left_outer, weight=1)
-
-        right_outer, right_card = self._card(paned)
-        ttk.Label(right_card, text="Результат (Output)", style="Heading.TLabel"
-                  ).pack(anchor="w", padx=12, pady=(10, 4))
-        self.txt_output, self.v_scroll_right, _ = self._create_scrolled_text(
-            right_card, lambda first, last: self._sync_yscroll(self.v_scroll_right, (self.txt_input,), first, last))
-        paned.add(right_outer, weight=1)
-
-        # Легенда цветов: подсветка разными цветами бесполезна, пока не
-        # видно, какой цвет какому типу данных соответствует. Показываются
-        # только типы, реально встретившиеся в текущем результате — полный
-        # список из 15 типов в каждой сессии только отвлекал бы.
-        self.legend_frame = ttk.Frame(tab_logs, style="App.TFrame")
-        self.legend_frame.pack(fill=tk.X, padx=12, pady=(0, 4))
-        self._legend_counts: Dict[str, int] = {}
-
-        # --- Вкладка "Таблица соответствия" ---
-        search_outer, search_card = self._card(tab_mapping)
-        search_outer.pack(fill=tk.X, padx=8, pady=(8, 6))
-
-        search_row = ttk.Frame(search_card, style="Card.TFrame")
-        search_row.pack(fill=tk.X, padx=12, pady=10)
-
-        ttk.Label(search_row, text=f"{ICON_SEARCH}  Поиск", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 6))
-        self.entry_search = ttk.Entry(search_row, width=28, font=(FONT_UI, 9))
-        self.entry_search.pack(side=tk.LEFT)
-        self.entry_search.bind("<KeyRelease>", self.filter_mapping_table)
-        self.mapping_type_filter = ttk.Combobox(
-            search_row, values=("Все типы",), state="readonly", width=12)
-        self.mapping_type_filter.set("Все типы")
-        self.mapping_type_filter.pack(side=tk.LEFT, padx=8)
-        self.mapping_type_filter.bind("<<ComboboxSelected>>", self.filter_mapping_table)
-
-        ttk.Button(search_row, text=f"{ICON_LOCK}  Экспорт JSON (mapping)", style="Ghost.TButton",
-                   command=self.export_mapping_json).pack(side=tk.RIGHT, padx=(6, 0))
-        ttk.Button(search_row, text=f"{ICON_EXPORT}  Экспорт CSV", style="Ghost.TButton",
-                   command=self.export_mapping_csv).pack(side=tk.RIGHT)
-
-        ttk.Label(tab_mapping,
-                  text=f"{ICON_WARN}  Эта таблица содержит исходные чувствительные данные. "
-                       f"Обращайтесь с ней и с экспортированными файлами так же, как с исходным логом.",
-                  style="Banner.TLabel", anchor="w").pack(fill=tk.X, padx=8, pady=(0, 6))
-
-        table_outer, table_card = self._card(tab_mapping)
-        table_outer.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
-
-        table_inner = ttk.Frame(table_card, style="Card.TFrame")
-        table_inner.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
-
-        self.map_tree = ttk.Treeview(table_inner, columns=("Original", "Pseudonym"),
-                                      show="headings", selectmode="browse")
-        self.map_tree.heading("Original", text="Оригинальное значение (чувствительные данные)")
-        self.map_tree.heading("Pseudonym", text="Псевдоним (safe for LLM)")
-        self.map_tree.column("Original", width=450)
-        self.map_tree.column("Pseudonym", width=450)
-
-        map_scroll = ttk.Scrollbar(table_inner, orient=tk.VERTICAL, command=self.map_tree.yview)
-        self.map_tree.configure(yscroll=map_scroll.set)
-        self.map_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        map_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        self.map_tree.bind("<Motion>", self._on_tree_motion)
-        self.map_tree.bind("<Leave>", lambda e: self._hide_tooltip())
-        self.map_tree.bind("<Double-1>", self._jump_from_mapping)
-
-        # --- Вкладка "Конфигурация" ---
-        config_banner_outer, config_banner_card = self._card(tab_config)
-        config_banner_outer.pack(fill=tk.X, padx=8, pady=(8, 6))
-        self.lbl_config_path = ttk.Label(
-            config_banner_card, text="", style="Banner.TLabel", anchor="w",
-            wraplength=1100, justify=tk.LEFT,
-        )
-        self.lbl_config_path.pack(fill=tk.X, padx=12, pady=8)
-
-        config_actions = ttk.Frame(tab_config, style="App.TFrame")
-        config_actions.pack(fill=tk.X, padx=8, pady=(0, 6))
-        ttk.Button(config_actions, text="📂  Открыть другой файл…", style="Ghost.TButton",
-                   command=self.load_config_file).pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Button(config_actions, text="💾  Сохранить", style="Primary.TButton",
-                   command=self.save_config_editor).pack(side=tk.LEFT, padx=6)
-        ttk.Button(config_actions, text="📁  Сохранить как…", style="Ghost.TButton",
-                   command=self.save_config_editor_as).pack(side=tk.LEFT, padx=6)
-        ttk.Button(config_actions, text="🔄  Перезагрузить с диска", style="Ghost.TButton",
-                   command=self.reload_config_editor).pack(side=tk.LEFT, padx=6)
-        ttk.Button(config_actions, text="✅  Проверить", style="Ghost.TButton",
-                   command=self.validate_config_editor).pack(side=tk.LEFT, padx=6)
-        ttk.Button(config_actions, text="↺  Сбросить к умолчаниям", style="Danger.TButton",
-                   command=self.reset_config_editor).pack(side=tk.LEFT, padx=6)
-
-        config_outer, config_card = self._card(tab_config)
-        config_outer.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
-        self.txt_config, self.v_scroll_config, _ = self._create_scrolled_text(
-            config_card, lambda first, last: self.v_scroll_config.set(first, last))
-
-        self._refresh_config_editor()
+        build_main_ui(self)
 
     # ------------------------------------------------------------------
     # Вкладка "Конфигурация" — редактирование и сохранение JSON-конфига
@@ -1113,6 +815,7 @@ class AnonymizerGUI:
             )
         self.txt_config.delete("1.0", tk.END)
         self.txt_config.insert(tk.END, json.dumps(self.config.as_dict(), ensure_ascii=False, indent=2))
+        self._refresh_allowlist_widget()
 
     def _parse_config_editor(self) -> Optional[AnonymizerConfig]:
         """Парсит текущее содержимое текстового поля в AnonymizerConfig.
@@ -1130,6 +833,8 @@ class AnonymizerGUI:
             messagebox.showerror("Некорректный JSON", "Верхний уровень конфигурации должен быть JSON-объектом ({...}).")
             return None
         try:
+            if hasattr(self, "allowlist_list"):
+                data["allowlist"] = list(self.allowlist_list.get(0, tk.END))
             return AnonymizerConfig.from_dict(data)
         except (TypeError, ValueError) as e:
             messagebox.showerror("Некорректная конфигурация", f"Не удалось построить конфигурацию из JSON:\n{e}")
@@ -1232,8 +937,93 @@ class AnonymizerGUI:
         )
         if not proceed:
             return
+        defaults = AnonymizerConfig()
         self.txt_config.delete("1.0", tk.END)
-        self.txt_config.insert(tk.END, json.dumps(AnonymizerConfig().as_dict(), ensure_ascii=False, indent=2))
+        self.txt_config.insert(tk.END, json.dumps(defaults.as_dict(), ensure_ascii=False, indent=2))
+        if hasattr(self, "allowlist_list"):
+            self.allowlist_list.delete(0, tk.END)
+            for value in defaults.allowlist:
+                self.allowlist_list.insert(tk.END, value)
+
+    def _refresh_allowlist_widget(self) -> None:
+        if not hasattr(self, "allowlist_list"):
+            return
+        self.allowlist_list.delete(0, tk.END)
+        for value in self.config.allowlist:
+            self.allowlist_list.insert(tk.END, value)
+
+    def _sync_allowlist_from_widget(self) -> None:
+        if not hasattr(self, "allowlist_list"):
+            return
+        self.config.allowlist = list(self.allowlist_list.get(0, tk.END))
+
+    def add_allowlist_value(self) -> None:
+        value = (self.allowlist_entry.get() or "").strip()
+        if not value:
+            return
+        current = list(self.allowlist_list.get(0, tk.END))
+        merged = merge_lists(current, [value])
+        self.allowlist_list.delete(0, tk.END)
+        for item in merged:
+            self.allowlist_list.insert(tk.END, item)
+        self.allowlist_entry.delete(0, tk.END)
+        self._sync_allowlist_from_widget()
+        self._patch_config_editor_allowlist()
+
+    def remove_allowlist_value(self) -> None:
+        selection = list(self.allowlist_list.curselection())
+        if not selection:
+            return
+        for index in reversed(selection):
+            self.allowlist_list.delete(index)
+        self._sync_allowlist_from_widget()
+        self._patch_config_editor_allowlist()
+
+    def add_allowlist_preset(self, preset_id: str) -> None:
+        extras = ALLOWLIST_PRESETS.get(preset_id, [])
+        if not extras:
+            return
+        merged = merge_lists(self.allowlist_list.get(0, tk.END), extras)
+        self.allowlist_list.delete(0, tk.END)
+        for item in merged:
+            self.allowlist_list.insert(tk.END, item)
+        self._sync_allowlist_from_widget()
+        self._patch_config_editor_allowlist()
+        self._set_status(f"Allowlist: добавлен пресет {preset_id}", "Info")
+
+    def _patch_config_editor_allowlist(self) -> None:
+        """Keep advanced JSON in sync with the allowlist listbox."""
+        if not hasattr(self, "txt_config"):
+            return
+        try:
+            data = json.loads(self.txt_config.get("1.0", tk.END))
+        except json.JSONDecodeError:
+            return
+        if not isinstance(data, dict):
+            return
+        data["allowlist"] = list(self.allowlist_list.get(0, tk.END))
+        self.txt_config.delete("1.0", tk.END)
+        self.txt_config.insert(tk.END, json.dumps(data, ensure_ascii=False, indent=2))
+
+    def apply_selected_profile(self) -> None:
+        title = self.profile_combo.get()
+        profile_id = getattr(self, "_profile_titles", {}).get(title)
+        if not profile_id:
+            messagebox.showwarning("Профиль", "Выберите профиль источника.")
+            return
+        proceed = messagebox.askyesno(
+            "Профиль источника",
+            f"Применить профиль «{title}»?\n"
+            "Обновятся списки полей (user/secret/CEF/JSON) и при необходимости allowlist.\n"
+            "Нажмите «Сохранить» на вкладке Конфигурация, чтобы записать на диск.",
+        )
+        if not proceed:
+            return
+        apply_source_profile(self.config, profile_id)
+        self.entry_org.delete(0, tk.END)
+        self.entry_org.insert(0, self.config.org_name)
+        self._refresh_config_editor()
+        self._set_status(f"Профиль применён: {title}", "Success")
 
     # ------------------------------------------------------------------
     # Тултип с контекстом в таблице соответствия
@@ -2281,197 +2071,16 @@ class AnonymizerGUI:
     # Diff и статистика
     # ------------------------------------------------------------------
 
-    # Сколько неизменившихся строк показывать вокруг изменения в
-    # HTML-отчёте (как context-lines в unified diff) — остальные
-    # сворачиваются в маркер, чтобы diff по большому логу с парой
-    # изменений не выводил файл целиком.
-    _HTML_DIFF_CONTEXT_LINES = 3
-
-    @staticmethod
-    def _build_value_regex(values) -> Optional["re.Pattern"]:
-        """Компилирует регэксп-альтернацию для поиска ЗАРАНЕЕ ИЗВЕСТНЫХ
-        значений (ключей mapping_table или reverse_mapping) в строке —
-        длинные значения первыми, чтобы совпадение-подстрока (например,
-        IP-адрес, являющийся префиксом другого IP-адреса) не "перехватывало"
-        более длинное и специфичное значение."""
-        values = [v for v in values if v]
-        if not values:
-            return None
-        escaped = sorted((re.escape(v) for v in values), key=len, reverse=True)
-        return re.compile("|".join(escaped))
-
-    @staticmethod
-    def _render_html_line(line: str, pattern: Optional["re.Pattern"], type_of) -> str:
-        """Экранирует строку под HTML и оборачивает в цветной <span> ТОЛЬКО
-        найденные регэкспом `pattern` вхождения — весь остальной текст
-        строки остаёть обычным, без подсветки. `type_of(matched_text)`
-        возвращает тип (ключ TAG_COLORS_DARK) для конкретного совпадения."""
-        if pattern is None:
-            return html.escape(line)
-        parts = []
-        pos = 0
-        for m in pattern.finditer(line):
-            if m.start() > pos:
-                parts.append(html.escape(line[pos:m.start()]))
-            matched = m.group(0)
-            bg, fg = TAG_COLORS_DARK.get(type_of(matched), TAG_COLORS_DARK["VALUE"])
-            parts.append(
-                f'<span style="background:{bg};color:{fg};border-radius:3px;'
-                f'padding:1px 4px;font-weight:600;">{html.escape(matched)}</span>'
-            )
-            pos = m.end()
-        if pos < len(line):
-            parts.append(html.escape(line[pos:]))
-        return "".join(parts)
-
     def _build_diff_html(self, original: str, cleaned: str) -> str:
-        """Строит самодостаточную HTML-страницу с diff'ом, где подсвечены
-        ТОЛЬКО конкретные значения (не строки целиком): в исходных
-        ("-") строках ищутся и подсвечиваются известные оригинальные
-        значения из mapping_table, в анонимизированных ("+") строках —
-        известные псевдонимы из reverse_mapping. Оба конца одной и той же
-        замены красятся ОДНИМ И ТЕМ ЖЕ цветом (по типу данных), чтобы было
-        видно, что во что превратилось. В отличие от difflib.HtmlDiff, это
-        не зависит от эвристики "похожести" старой и новой строки как
-        последовательностей символов — а она у значения вида "10.0.0.5"
-        против его псевдонима "[IP_982c4063468d]" почти всегда достаточно
-        низкая, чтобы difflib.HtmlDiff красил строку целиком вместо
-        конкретного значения."""
         mapping_table = self.anonymizer.mapping_table if self.anonymizer else {}
         reverse_mapping = self.anonymizer.reverse_mapping if self.anonymizer else {}
-        orig_pattern = self._build_value_regex(mapping_table.keys())
-        pseudo_pattern = self._build_value_regex(reverse_mapping.keys())
-
-        def orig_type(v: str) -> str:
-            return _pseudonym_type(mapping_table.get(v, ""))
-
-        def pseudo_type(v: str) -> str:
-            return _pseudonym_type(v)
-
-        lines_a = original.splitlines()
-        lines_b = cleaned.splitlines()
-        opcodes = difflib.SequenceMatcher(None, lines_a, lines_b, autojunk=False).get_opcodes()
-
-        body_parts = []
-        n_ops = len(opcodes)
-        any_change = any(tag != "equal" for tag, *_ in opcodes)
-        if not any_change:
-            body_parts.append('<div class="line line-ctx">Изменений нет — анонимизация ничего не заменила в этом тексте.</div>')
-        else:
-            for idx, (tag, i1, i2, j1, j2) in enumerate(opcodes):
-                if tag == "equal":
-                    block = lines_a[i1:i2]
-                    need_head = idx > 0
-                    need_tail = idx < n_ops - 1
-                    budget = (self._HTML_DIFF_CONTEXT_LINES if need_head else 0) \
-                        + (self._HTML_DIFF_CONTEXT_LINES if need_tail else 0)
-                    if not (need_head or need_tail) or len(block) <= max(budget, 1):
-                        shown = block
-                        skipped = 0
-                    else:
-                        head = block[:self._HTML_DIFF_CONTEXT_LINES] if need_head else []
-                        tail = block[-self._HTML_DIFF_CONTEXT_LINES:] if need_tail else []
-                        skipped = len(block) - len(head) - len(tail)
-                        shown = None
-                    if shown is not None:
-                        for line in shown:
-                            body_parts.append(f'<div class="line line-ctx">{html.escape(line)}</div>')
-                    else:
-                        for line in head:
-                            body_parts.append(f'<div class="line line-ctx">{html.escape(line)}</div>')
-                        if skipped > 0:
-                            body_parts.append(f'<div class="line line-skip">⋯ ещё {skipped} неизменившихся строк(и) ⋯</div>')
-                        for line in tail:
-                            body_parts.append(f'<div class="line line-ctx">{html.escape(line)}</div>')
-                else:
-                    for line in lines_a[i1:i2]:
-                        rendered = self._render_html_line(line, orig_pattern, orig_type)
-                        body_parts.append(f'<div class="line line-old"><span class="marker">-</span> {rendered}</div>')
-                    for line in lines_b[j1:j2]:
-                        rendered = self._render_html_line(line, pseudo_pattern, pseudo_type)
-                        body_parts.append(f'<div class="line line-new"><span class="marker">+</span> {rendered}</div>')
-
-        types_present = sorted({_pseudonym_type(p) for p in reverse_mapping.keys()})
-        legend_rows = "".join(
-            f'<tr><td><span class="swatch" style="background:{TAG_COLORS_DARK.get(t, TAG_COLORS_DARK["VALUE"])[0]};'
-            f'color:{TAG_COLORS_DARK.get(t, TAG_COLORS_DARK["VALUE"])[1]}">{html.escape(t)}</span></td>'
-            f'<td><b>{html.escape(_TYPE_LEGEND_RU.get(t, (t, ""))[0])}</b></td>'
-            f'<td class="muted">{html.escape(_TYPE_LEGEND_RU.get(t, ("", ""))[1])}</td></tr>'
-            for t in types_present
-        ) or '<tr><td colspan="3" class="muted">Замен не было.</td></tr>'
-
-        generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        return f"""<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<title>SOC Log Anonymizer — diff-отчёт</title>
-<style>
-  body {{ background:#0a0f1e; color:#f1f5f9; font-family: Consolas, "Courier New", monospace;
-          margin:0; padding:24px 32px 48px; line-height:1.55; }}
-  h1 {{ font-size:20px; margin:0 0 4px; }}
-  .subtitle {{ color:#94a3b8; font-size:13px; margin:0 0 20px; }}
-  .banner {{ background:#141b2e; border:1px solid #263047; border-radius:8px; padding:14px 18px;
-             margin-bottom:20px; font-size:13px; color:#cbd5e1; }}
-  .diff-box {{ background:#111726; border:1px solid #263047; border-radius:8px; padding:14px 0;
-               overflow-x:auto; }}
-  .line {{ padding:2px 18px; white-space:pre-wrap; word-break:break-word; font-size:13px; }}
-  .line-old {{ color:#fca5a5; }}
-  .line-new {{ color:#86efac; }}
-  .line-ctx {{ color:#64748b; }}
-  .line-skip {{ color:#64748b; font-style:italic; text-align:center; padding:6px 18px; }}
-  .marker {{ display:inline-block; width:14px; color:inherit; opacity:0.85; font-weight:700; }}
-  .legend {{ margin-top:28px; }}
-  .legend h2 {{ font-size:15px; margin:0 0 8px; }}
-  .legend p {{ font-size:13px; color:#cbd5e1; max-width:900px; }}
-  .legend table {{ border-collapse:collapse; margin-top:10px; font-size:12.5px; }}
-  .legend td {{ padding:5px 12px 5px 0; vertical-align:top; }}
-  .swatch {{ display:inline-block; padding:2px 8px; border-radius:4px; font-weight:700;
-             font-size:11px; letter-spacing:0.03em; }}
-  .muted {{ color:#94a3b8; }}
-</style>
-</head>
-<body>
-  <h1>🔀 SOC Log Anonymizer — diff-отчёт</h1>
-  <p class="subtitle">Сформировано: {generated_at} · Организация: {html.escape(self.anonymizer.config.org_name if self.anonymizer else "")}</p>
-  <div class="banner">
-    ⚠️ Этот файл содержит исходные чувствительные данные наравне с
-    анонимизированными (в "-"-строках) — обращайтесь с ним так же, как с
-    исходным логом. Строки, начинающиеся с "-", — как было в исходном
-    логе; строки с "+" — после анонимизации. Подсвечены (цветным фоном)
-    ТОЛЬКО конкретные значения, которые были заменены, — не строки
-    целиком, — чтобы сразу было видно, что именно изменилось, не теряя
-    из виду остальной контекст строки. Один и тот же цвет у значения в
-    "-"-строке и у псевдонима в соответствующей "+"-строке означает, что
-    это одна и та же замена (см. подробную расшифровку цветов в конце
-    отчёта).
-  </div>
-  <div class="diff-box">
-    {"".join(body_parts)}
-  </div>
-  <div class="legend">
-    <h2>Что означают цвета</h2>
-    <p>
-      Каждому типу данных назначен свой цвет фона — он одинаков и для
-      исходного значения (в "-"-строке), и для псевдонима, в который оно
-      превратилось (в соответствующей "+"-строке), поэтому по цвету можно
-      проследить конкретную замену, даже если строки визуально далеко
-      друг от друга. Ниже — расшифровка каждого типа, встретившегося в
-      этом тексте:
-    </p>
-    <table>
-      {legend_rows}
-    </table>
-  </div>
-</body>
-</html>
-"""
+        org_name = self.anonymizer.config.org_name if self.anonymizer else ""
+        return _build_diff_html_doc(
+            original, cleaned, mapping_table, reverse_mapping, org_name=org_name,
+        )
 
     def export_diff_html(self):
-        """Экспорт diff'а в отдельный HTML-файл — для тех случаев, когда
-        его нужно отправить коллеге или распечатать. Файл содержит исходные
-        чувствительные данные наравне с анонимизированными — обращайтесь
-        с ним так же, как с исходным логом."""
+        """Экспорт diff'а в отдельный HTML-файл."""
         original = self._text_value(self.txt_input)
         cleaned = self.txt_output.get("1.0", tk.END)
         if not original.strip() or not cleaned.strip():

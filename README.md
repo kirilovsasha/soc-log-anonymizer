@@ -1036,7 +1036,13 @@ soc-log-anonymizer/
 │   ├── io_utils.py       # автоопределение кодировки, gzip, mmap-стриминг, проверка прав доступа
 │   ├── cli.py             # CLI (argparse): anonymize/deanonymize/batch/validate-config/--version
 │   ├── gui_logic.py       # чистая логика GUI без tkinter (тестируется где угодно)
-│   └── gui.py             # GUI (tkinter): темы, шрифты, хоткеи, undo, подсветка diff в Input/Output, автосохранение
+│   ├── gui_constants.py   # иконки и размеры GUI
+│   ├── gui_theme.py       # палитры и цвета типов
+│   ├── gui_profiles.py    # профили источников и allowlist-хелперы
+│   ├── gui_diff_html.py   # HTML diff-отчёт
+│   ├── gui_layout.py      # раскладка главного окна
+│   ├── gui_session.py     # сохранение org между запусками
+│   └── gui.py             # GUI (tkinter): оркестрация, обработка, mapping, конфиг
 ├── tests/
 │   ├── test_anonymizer.py
 │   ├── test_cli.py        # unittest.mock, включая --version и gzip

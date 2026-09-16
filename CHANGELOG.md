@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Simplified GUI toolbar to a single workflow row + session row; secondary actions under «Ещё».
+- Split GUI into `gui_constants`, `gui_layout`, `gui_profiles`, `gui_diff_html` modules.
+- Added source profiles (Windows / Cisco / Checkpoint / Syslog) and a list-based allowlist editor on the Config tab.
 - Removed GUI session fields `mask_types` / `skip_types` / `allowlist`; `allowlist` remains config-only.
 - Removed `mask_types` and `skip_types` configuration options entirely.
 
