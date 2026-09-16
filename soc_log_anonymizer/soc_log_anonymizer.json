@@ -1,6 +1,8 @@
 {
   "org_name": "bank",
   "config_version": 1,
+  "custom_patterns": {},
+  "context_rules": [],
   "hash_len": 12,
   "max_token_len": 500,
   "max_input_size_mb": 500,
@@ -171,5 +173,22 @@
     "suser",
     "duser"
   ],
-  "session_timeout_minutes": 20
+  "session_timeout_minutes": 20,
+  "allowlist": [
+    "8.8.8.8",
+    "8.8.4.4",
+    "1.1.1.1",
+    "9.9.9.9",
+    "SYSTEM",
+    "LOCAL SERVICE",
+    "NETWORK SERVICE",
+    "Administrator",
+    "Administrators",
+    "Everyone"
+  ],
+  "fqdn_stopwords": [],
+  "hash_require_context": true,
+  "multiline_join": true,
+  "parse_structured": true,
+  "json_preserve_formatting": true
 }

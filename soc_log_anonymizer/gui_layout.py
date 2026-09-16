@@ -24,11 +24,7 @@ from .gui_constants import (
     ICON_TAB_MAP,
     ICON_UNDO,
     ICON_WARN,
-    MAX_FONT_SIZE,
-    MIN_FONT_SIZE,
 )
-from .gui_profiles import SOURCE_PROFILES, profile_choices
-
 if TYPE_CHECKING:
     from .gui import AnonymizerGUI
 
@@ -41,110 +37,90 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
     toolbar_outer, toolbar = app._card(main)
     toolbar_outer.pack(fill=tk.X, padx=8, pady=(8, 4))
 
-    # --- Primary workflow (one row) ---
-    primary = ttk.Frame(toolbar, style="Card.TFrame")
-    primary.pack(fill=tk.X, padx=8, pady=(8, 4))
+    # Single compact header: workflow | session | overflow
+    bar = ttk.Frame(toolbar, style="Card.TFrame")
+    bar.pack(fill=tk.X, padx=10, pady=10)
 
-    from .gui_constants import ICON_UNDO
+    left = ttk.Frame(bar, style="Card.TFrame")
+    left.pack(side=tk.LEFT)
 
-    app.btn_open = ttk.Button(
-        primary, text=f"{ICON_OPEN}  Открыть", style="Ghost.TButton", command=app.open_file
+    open_btn = ttk.Menubutton(
+        left, text=f"{ICON_OPEN}  Открыть ▾", style="Ghost.TMenubutton"
     )
-    app.btn_open.pack(side=tk.LEFT, padx=(0, 6))
-
-    app.btn_open_folder = ttk.Button(
-        primary, text="Папка", style="Ghost.TButton", command=app.open_folder
-    )
-    app.btn_open_folder.pack(side=tk.LEFT, padx=(0, 6))
+    open_menu = tk.Menu(open_btn, tearoff=False)
+    open_menu.add_command(label="Файл…", command=app.open_file)
+    open_menu.add_command(label="Папку…", command=app.open_folder)
+    open_btn["menu"] = open_menu
+    open_btn.pack(side=tk.LEFT, padx=(0, 6))
+    # Same widget: processing disables both open entry points together.
+    app.btn_open = open_btn
+    app.btn_open_folder = open_btn
 
     app.btn_process = ttk.Button(
-        primary, text=f"{ICON_RUN}  Анонимизировать", style="Primary.TButton",
+        left, text=f"{ICON_RUN}  Анонимизировать", style="Primary.TButton",
         command=app.start_processing_thread,
     )
-    app.btn_process.pack(side=tk.LEFT, padx=6)
-
-    ttk.Button(
-        primary, text=f"{ICON_COPY}  Копировать", style="Ghost.TButton", command=app.copy_result
-    ).pack(side=tk.LEFT, padx=6)
-    ttk.Button(
-        primary, text=f"{ICON_SAVE}  Сохранить", style="Ghost.TButton", command=app.save_file
-    ).pack(side=tk.LEFT, padx=6)
+    app.btn_process.pack(side=tk.LEFT, padx=(0, 6))
 
     app.btn_cancel = ttk.Button(
-        primary, text="Отменить", style="Danger.TButton",
+        left, text="Отменить", style="Danger.TButton",
         command=app.cancel_operation, state=tk.DISABLED,
     )
-    app.btn_cancel.pack(side=tk.LEFT, padx=6)
+    app.btn_cancel.pack(side=tk.LEFT, padx=(0, 4))
 
     app.btn_undo = ttk.Button(
-        primary, text=f"{ICON_UNDO} Undo", style="Ghost.TButton",
+        left, text=f"{ICON_UNDO}", style="IconGhost.TButton", width=3,
         command=app.undo_last, state=tk.DISABLED,
     )
-    app.btn_undo.pack(side=tk.LEFT, padx=6)
+    app.btn_undo.pack(side=tk.LEFT)
 
-    more = ttk.Menubutton(primary, text="Ещё ▾")
-    more_menu = tk.Menu(more, tearoff=False)
-    more_menu.add_command(label="Деанонимизировать", command=app.deanonymize_text)
-    more_menu.add_command(label="Очистить всё", command=app.clear_all)
-    more_menu.add_separator()
-    more_menu.add_command(label=f"{ICON_DIFF} HTML Diff отчёт", command=app.export_diff_html)
-    more_menu.add_command(label=f"{ICON_STATS} Статистика", command=app.show_stats)
-    more["menu"] = more_menu
-    more.pack(side=tk.LEFT, padx=6)
-    app.btn_deanonymize = more
+    ttk.Separator(bar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=14, pady=2)
 
-    app.result_format = ttk.Combobox(
-        primary, values=("text", "json", "csv"), state="readonly", width=8
-    )
-    app.result_format.set("text")
-    app.result_format.pack(side=tk.RIGHT, padx=(0, 4))
-    ttk.Label(primary, text="Формат", style="Muted.TLabel").pack(side=tk.RIGHT, padx=(0, 4))
-    # --- Session row ---
-    session = ttk.Frame(toolbar, style="Card.TFrame")
-    session.pack(fill=tk.X, padx=8, pady=(0, 8))
+    mid = ttk.Frame(bar, style="Card.TFrame")
+    mid.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-    ttk.Label(session, text="Организация", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
-    app.entry_org = ttk.Entry(session, width=12, font=(FONT_UI, 9))
+    ttk.Label(mid, text="Орг.", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
+    app.entry_org = ttk.Entry(mid, width=10, font=(FONT_UI, 9))
     app.entry_org.insert(0, app.config.org_name)
     app.entry_org.pack(side=tk.LEFT, padx=(0, 10))
 
-    ttk.Label(session, text="Соль", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
-    app.entry_salt = ttk.Entry(session, width=20, font=(FONT_UI, 9))
+    ttk.Label(mid, text="Соль", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
+    app.entry_salt = ttk.Entry(mid, width=18, font=(FONT_UI, 9))
     app.entry_salt.insert(0, secrets.token_hex(16))
     app.entry_salt.pack(side=tk.LEFT)
     vcmd = (app.root.register(app._validate_salt_live), "%P")
     app.entry_salt.configure(validate="key", validatecommand=vcmd)
     ttk.Button(
-        session, text=ICON_DICE, style="IconGhost.TButton", width=3,
+        mid, text=ICON_DICE, style="IconGhost.TButton", width=3,
         command=app.generate_new_salt,
-    ).pack(side=tk.LEFT, padx=(4, 12))
+    ).pack(side=tk.LEFT)
 
-    ttk.Label(session, text="Профиль", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
-    choices = profile_choices()
-    app._profile_titles = {title: pid for pid, title in choices}
-    app.profile_combo = ttk.Combobox(
-        session, values=[title for _, title in choices], state="readonly", width=16
-    )
-    app.profile_combo.set(SOURCE_PROFILES["default"].title)
-    app.profile_combo.pack(side=tk.LEFT, padx=(0, 4))
+    right = ttk.Frame(bar, style="Card.TFrame")
+    right.pack(side=tk.RIGHT)
+
+    more = ttk.Menubutton(right, text="Ещё ▾", style="Ghost.TMenubutton")
+    more_menu = tk.Menu(more, tearoff=False)
+    more_menu.add_command(label=f"{ICON_COPY}  Копировать результат", command=app.copy_result)
+    more_menu.add_command(label=f"{ICON_SAVE}  Сохранить результат", command=app.save_file)
+    more_menu.add_command(label="Деанонимизировать", command=app.deanonymize_text)
+    more_menu.add_command(label="Очистить всё", command=app.clear_all)
+    more_menu.add_separator()
+    format_menu = tk.Menu(more_menu, tearoff=False)
+    for fmt in ("text", "json", "csv"):
+        format_menu.add_radiobutton(
+            label=fmt, value=fmt, variable=app.result_format,
+        )
+    more_menu.add_cascade(label="Формат результата", menu=format_menu)
+    more_menu.add_separator()
+    more_menu.add_command(label=f"{ICON_DIFF} HTML Diff отчёт", command=app.export_diff_html)
+    more_menu.add_command(label=f"{ICON_STATS} Статистика", command=app.show_stats)
+    more["menu"] = more_menu
+    more.pack(side=tk.LEFT, padx=(0, 6))
+    app.btn_deanonymize = more
+
     ttk.Button(
-        session, text="Применить", style="Ghost.TButton", command=app.apply_selected_profile
-    ).pack(side=tk.LEFT, padx=(0, 12))
-
-    app.dark_mode_chk = ttk.Checkbutton(
-        session, text=f"{ICON_MOON} Тема", variable=app.dark_mode, command=app._apply_theme
-    )
-    app.dark_mode_chk.pack(side=tk.LEFT, padx=(0, 10))
-
-    ttk.Label(session, text="Шрифт", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
-    ttk.Spinbox(
-        session, from_=MIN_FONT_SIZE, to=MAX_FONT_SIZE, width=3,
-        textvariable=app.font_size, command=app._apply_font_size,
-    ).pack(side=tk.LEFT, padx=(0, 10))
-
-    app.sync_scroll_var = tk.BooleanVar(value=True)
-    ttk.Checkbutton(
-        session, text="Синхр. скролл", variable=app.sync_scroll_var
+        right, text=ICON_MOON, style="IconGhost.TButton", width=3,
+        command=app._toggle_dark_mode,
     ).pack(side=tk.LEFT)
 
     # --- Status ---

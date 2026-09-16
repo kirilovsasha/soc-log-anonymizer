@@ -1038,7 +1038,7 @@ soc-log-anonymizer/
 │   ├── gui_logic.py       # чистая логика GUI без tkinter (тестируется где угодно)
 │   ├── gui_constants.py   # иконки и размеры GUI
 │   ├── gui_theme.py       # палитры и цвета типов
-│   ├── gui_profiles.py    # профили источников и allowlist-хелперы
+│   ├── gui_profiles.py    # allowlist-хелперы GUI
 │   ├── gui_diff_html.py   # HTML diff-отчёт
 │   ├── gui_layout.py      # раскладка главного окна
 │   ├── gui_session.py     # сохранение org между запусками

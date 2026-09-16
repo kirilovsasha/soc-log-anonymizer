@@ -70,7 +70,6 @@ from .gui_diff_html import build_diff_html as _build_diff_html_doc
 from .gui_layout import build_main_ui
 from .gui_profiles import (
     ALLOWLIST_PRESETS,
-    apply_source_profile,
     merge_lists,
 )
 from .io_utils import format_size_mb, read_file_auto_encoding
@@ -143,9 +142,11 @@ class AnonymizerGUI:
         self._diff_render_token = 0
         self._last_file_report: List[dict] = []
 
-        # Тема и размер шрифта (сохраняются только на время сессии)
+        # Тема и размер шрифта (сохраняются в gui_state)
         self.dark_mode = tk.BooleanVar(value=False)
         self.font_size = tk.IntVar(value=DEFAULT_FONT_SIZE)
+        self.sync_scroll_var = tk.BooleanVar(value=True)
+        self.result_format = tk.StringVar(value="text")
 
         # Путь автосохранения черновика ввода (см. _schedule_autosave) —
         # уникален для процесса, чтобы несколько запущенных копий
@@ -518,6 +519,22 @@ class AnonymizerGUI:
         edit_menu.add_command(label="Очистить всё", command=self.clear_all,
                               accelerator=self._accelerator_for("clear_all"))
         view_menu = tk.Menu(menu, tearoff=False)
+        view_menu.add_checkbutton(
+            label="Тёмная тема", variable=self.dark_mode, command=self._apply_theme,
+        )
+        view_menu.add_checkbutton(
+            label="Синхронизация скролла", variable=self.sync_scroll_var,
+        )
+        font_menu = tk.Menu(view_menu, tearoff=False)
+        for size in range(MIN_FONT_SIZE, MAX_FONT_SIZE + 1):
+            font_menu.add_radiobutton(
+                label=f"{size} pt",
+                value=size,
+                variable=self.font_size,
+                command=self._apply_font_size,
+            )
+        view_menu.add_cascade(label="Размер шрифта", menu=font_menu)
+        view_menu.add_separator()
         view_menu.add_command(label="Поиск по логам", command=self._focus_log_search,
                               accelerator=self._accelerator_for("_focus_log_search"))
         view_menu.add_command(label="Следующее совпадение", command=lambda: self._find_in_logs(1),
@@ -632,6 +649,14 @@ class AnonymizerGUI:
                               ("active", p["surface_alt"])],
                   foreground=[("disabled", p["disabled_fg"])])
 
+        style.configure("Ghost.TMenubutton", background=p["surface"], foreground=p["text"],
+                         bordercolor=p["border"], borderwidth=1, padding=(12, 8), font=(FONT_UI, 9),
+                         relief="raised")
+        style.map("Ghost.TMenubutton",
+                  background=[("disabled", p["surface"]), ("pressed", p["surface_alt"]),
+                              ("active", p["surface_alt"])],
+                  foreground=[("disabled", p["disabled_fg"])])
+
         style.configure("Danger.TButton", background=p["surface"], foreground=p["danger"],
                          bordercolor=p["danger"], borderwidth=1, padding=(12, 8), font=(FONT_UI, 9))
         style.map("Danger.TButton",
@@ -719,6 +744,10 @@ class AnonymizerGUI:
     def _apply_theme(self):
         self._configure_styles()
         self._render_type_legend()
+
+    def _toggle_dark_mode(self) -> None:
+        self.dark_mode.set(not self.dark_mode.get())
+        self._apply_theme()
 
     def _render_type_legend(self) -> None:
         """Перерисовывает легенду по self._legend_counts.
@@ -1004,26 +1033,6 @@ class AnonymizerGUI:
         data["allowlist"] = list(self.allowlist_list.get(0, tk.END))
         self.txt_config.delete("1.0", tk.END)
         self.txt_config.insert(tk.END, json.dumps(data, ensure_ascii=False, indent=2))
-
-    def apply_selected_profile(self) -> None:
-        title = self.profile_combo.get()
-        profile_id = getattr(self, "_profile_titles", {}).get(title)
-        if not profile_id:
-            messagebox.showwarning("Профиль", "Выберите профиль источника.")
-            return
-        proceed = messagebox.askyesno(
-            "Профиль источника",
-            f"Применить профиль «{title}»?\n"
-            "Обновятся списки полей (user/secret/CEF/JSON) и при необходимости allowlist.\n"
-            "Нажмите «Сохранить» на вкладке Конфигурация, чтобы записать на диск.",
-        )
-        if not proceed:
-            return
-        apply_source_profile(self.config, profile_id)
-        self.entry_org.delete(0, tk.END)
-        self.entry_org.insert(0, self.config.org_name)
-        self._refresh_config_editor()
-        self._set_status(f"Профиль применён: {title}", "Success")
 
     # ------------------------------------------------------------------
     # Тултип с контекстом в таблице соответствия
