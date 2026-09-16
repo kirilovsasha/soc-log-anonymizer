@@ -38,8 +38,8 @@ jobs:
       - name: Lint new modules
         run: |
           pip install ruff mypy
-          ruff check soc_log_anonymizer/detectors.py soc_log_anonymizer/result.py soc_log_anonymizer/structured.py soc_log_anonymizer/gui_theme.py soc_log_anonymizer/gui_session.py
-          mypy --ignore-missing-imports soc_log_anonymizer/detectors.py soc_log_anonymizer/result.py soc_log_anonymizer/structured.py soc_log_anonymizer/gui_session.py
+          ruff check soc_log_anonymizer/detectors.py soc_log_anonymizer/result.py soc_log_anonymizer/structured.py soc_log_anonymizer/gui_theme.py
+          mypy --ignore-missing-imports soc_log_anonymizer/detectors.py soc_log_anonymizer/result.py soc_log_anonymizer/structured.py
 
       - name: Run doctest examples
         run: |

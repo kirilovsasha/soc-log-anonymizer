@@ -47,7 +47,6 @@ a = Analysis(
         "tkinter.ttk",
         "tkinter.filedialog",
         "soc_log_anonymizer.gui_theme",
-        "soc_log_anonymizer.gui_session",
         "soc_log_anonymizer.detectors",
         "soc_log_anonymizer.result",
         "soc_log_anonymizer.structured",

@@ -19,10 +19,6 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from .anonymizer import SOCLogAnonymizer
 from .audit import log_audit_event
 from .config import AnonymizerConfig, find_default_config_path, _app_dir
-from .gui_session import (
-    extract_session_profile,
-    session_fields_from_config,
-)
 from .gui_theme import (
     HIGHLIGHT_TAG_NAMES,
     PALETTE_DARK,
@@ -183,7 +179,6 @@ class AnonymizerGUI:
         self.root.bind("<Configure>", self._on_window_resize, add="+")
         self._build_menu()
 
-        self._add_placeholder(self.entry_org, "например, bank")
         self._add_placeholder(self.entry_salt, "случайная строка…")
         self._add_placeholder(self.txt_input, "Вставьте лог сюда или нажмите «Открыть» (Ctrl+O)…")
 
@@ -226,9 +221,6 @@ class AnonymizerGUI:
             self.font_size.set(DEFAULT_FONT_SIZE)
         self._configure_styles()
         self._apply_font_size()
-        profile = extract_session_profile(self._gui_state)
-        if hasattr(self, "entry_org") and profile.get("org_name"):
-            self._set_widget_content(self.entry_org, profile["org_name"])
         self.root.after_idle(self._restore_editor_sash)
 
     def _restore_editor_sash(self) -> None:
@@ -247,9 +239,6 @@ class AnonymizerGUI:
             "dark_mode": bool(self.dark_mode.get()),
             "font_size": int(self.font_size.get()),
         }
-        if hasattr(self, "entry_org"):
-            org = self._entry_value(self.entry_org) or self.config.org_name
-            state.update(session_fields_from_config(org))
         try:
             state["editor_sash"] = int(self.editor_paned.sashpos(0))
         except (AttributeError, tk.TclError):
@@ -909,8 +898,6 @@ class AnonymizerGUI:
             return
         self.config = config
         self._config_path = path
-        self.entry_org.delete(0, tk.END)
-        self.entry_org.insert(0, self.config.org_name)
         self._refresh_config_editor()
         self._reset_session_timer()
         logger.info("Конфигурация сохранена: %s", path)
@@ -950,8 +937,6 @@ class AnonymizerGUI:
         except (OSError, json.JSONDecodeError) as e:
             messagebox.showerror("Ошибка", f"Не удалось перечитать {self._config_path}:\n{e}")
             return
-        self.entry_org.delete(0, tk.END)
-        self.entry_org.insert(0, self.config.org_name)
         self._refresh_config_editor()
         self._set_status(f"Конфигурация перечитана: {os.path.basename(self._config_path)}", "Muted")
 
@@ -1284,8 +1269,6 @@ class AnonymizerGUI:
             self.config = AnonymizerConfig.load(file_path)
             self._config_path = file_path
             issues = self.config.validate()
-            self.entry_org.delete(0, tk.END)
-            self.entry_org.insert(0, self.config.org_name)
             self._reset_session_timer()
             self._refresh_config_editor()
             logger.info("Конфигурация загружена: %s", file_path)
@@ -1596,7 +1579,7 @@ class AnonymizerGUI:
             if not proceed:
                 return
 
-        org_name = self._entry_value(self.entry_org) or "bank"
+        org_name = (self.config.org_name or "").strip() or "bank"
         salt = self._entry_value(self.entry_salt) or secrets.token_hex(16)
 
         warning = salt_entropy_warning(salt)

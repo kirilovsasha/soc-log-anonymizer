@@ -1041,7 +1041,6 @@ soc-log-anonymizer/
 │   ├── gui_profiles.py    # allowlist-хелперы GUI
 │   ├── gui_diff_html.py   # HTML diff-отчёт
 │   ├── gui_layout.py      # раскладка главного окна
-│   ├── gui_session.py     # сохранение org между запусками
 │   └── gui.py             # GUI (tkinter): оркестрация, обработка, mapping, конфиг
 ├── tests/
 │   ├── test_anonymizer.py

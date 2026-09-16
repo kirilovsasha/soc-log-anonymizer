@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Compacted the GUI header into a single toolbar row; secondary actions live under «Ещё», theme/font/sync under «Вид».
+- `org_name` is config-only (toolbar field removed); Copy result is on the main toolbar.
 - Split GUI into `gui_constants`, `gui_layout`, `gui_profiles`, `gui_diff_html` modules.
 - Added a list-based allowlist editor on the Config tab (no source profiles).
 - Removed GUI session fields `mask_types` / `skip_types` / `allowlist`; `allowlist` remains config-only.

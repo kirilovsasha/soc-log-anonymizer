@@ -62,6 +62,11 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
     )
     app.btn_process.pack(side=tk.LEFT, padx=(0, 6))
 
+    ttk.Button(
+        left, text=f"{ICON_COPY}  Копировать", style="Ghost.TButton",
+        command=app.copy_result,
+    ).pack(side=tk.LEFT, padx=(0, 6))
+
     app.btn_cancel = ttk.Button(
         left, text="Отменить", style="Danger.TButton",
         command=app.cancel_operation, state=tk.DISABLED,
@@ -79,13 +84,8 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
     mid = ttk.Frame(bar, style="Card.TFrame")
     mid.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-    ttk.Label(mid, text="Орг.", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
-    app.entry_org = ttk.Entry(mid, width=10, font=(FONT_UI, 9))
-    app.entry_org.insert(0, app.config.org_name)
-    app.entry_org.pack(side=tk.LEFT, padx=(0, 10))
-
     ttk.Label(mid, text="Соль", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
-    app.entry_salt = ttk.Entry(mid, width=18, font=(FONT_UI, 9))
+    app.entry_salt = ttk.Entry(mid, width=22, font=(FONT_UI, 9))
     app.entry_salt.insert(0, secrets.token_hex(16))
     app.entry_salt.pack(side=tk.LEFT)
     vcmd = (app.root.register(app._validate_salt_live), "%P")
@@ -100,7 +100,6 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
 
     more = ttk.Menubutton(right, text="Ещё ▾", style="Ghost.TMenubutton")
     more_menu = tk.Menu(more, tearoff=False)
-    more_menu.add_command(label=f"{ICON_COPY}  Копировать результат", command=app.copy_result)
     more_menu.add_command(label=f"{ICON_SAVE}  Сохранить результат", command=app.save_file)
     more_menu.add_command(label="Деанонимизировать", command=app.deanonymize_text)
     more_menu.add_command(label="Очистить всё", command=app.clear_all)
