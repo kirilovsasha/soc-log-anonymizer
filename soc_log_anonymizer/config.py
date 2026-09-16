@@ -224,6 +224,7 @@ def _default_secret_field_names() -> List[str]:
 _LIST_FIELDS = {
     "sensitive_json_keys", "well_known_sids", "phone_prefixes", "fqdn_tlds", "cef_fields",
     "org_aliases", "user_field_names", "secret_field_names", "cef_user_fields",
+    "mask_types", "skip_types", "allowlist", "fqdn_stopwords",
 }
 _DICT_FIELDS = {"key_type_hints", "custom_patterns"}
 
@@ -335,6 +336,23 @@ class AnonymizerConfig:
     # которого таблица соответствия автоматически очищается из памяти.
     session_timeout_minutes: int = 20
 
+    # Empty mask_types = all families. skip_types always subtracted.
+    # Families: IP, EMAIL, USER, FQDN, ORG, SID, UUID, MAC, PHONE, HASH,
+    # JWT, SECRET, URL, TOKEN. Not vendor profiles — just on/off switches.
+    mask_types: List[str] = field(default_factory=list)
+    skip_types: List[str] = field(default_factory=list)
+    allowlist: List[str] = field(default_factory=list)
+    fqdn_stopwords: List[str] = field(default_factory=list)
+
+    # Free-text HASH matches only near hash/md5/sha/ntlm/… keywords.
+    hash_require_context: bool = True
+    # Join syslog backslash-continuations and indented traceback lines.
+    multiline_join: bool = True
+    # Split CEF/LEEF extensions and RFC5424 hostname before generic regex.
+    parse_structured: bool = True
+    # If original JSON has no newlines, dump compact (do not force indent=2).
+    json_preserve_formatting: bool = True
+
     def normalize_keys(self) -> "AnonymizerConfig":
         """Normalize configured field names consistently across JSON/INI input."""
         self.sensitive_json_keys = [normalize_key(v) for v in self.sensitive_json_keys if str(v).strip()]
@@ -349,6 +367,10 @@ class AnonymizerConfig:
         self.custom_patterns = _normalize_custom_pattern_map(self.custom_patterns)
         if isinstance(self.context_rules, list):
             self.context_rules = [dict(rule) for rule in self.context_rules if isinstance(rule, dict)]
+        self.mask_types = [str(v).upper().strip() for v in self.mask_types if str(v).strip()]
+        self.skip_types = [str(v).upper().strip() for v in self.skip_types if str(v).strip()]
+        self.allowlist = [str(v).strip() for v in self.allowlist if str(v).strip()]
+        self.fqdn_stopwords = [str(v).strip() for v in self.fqdn_stopwords if str(v).strip()]
         return self
 
     def iter_custom_patterns(self):
@@ -467,6 +489,7 @@ class AnonymizerConfig:
             "cef_fields": list, "user_field_names": list,
             "secret_field_names": list,
             "custom_patterns": dict,
+            "mask_types": list, "skip_types": list, "allowlist": list,
         }
         for name, expected in expected_types.items():
             value = getattr(self, name)

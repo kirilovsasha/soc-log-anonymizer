@@ -1,9 +1,9 @@
 # 🛡️ SOC Log Anonymizer
 
-[![Python](https://img.shields.io/badge/python-3.8%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
 [![Dependencies](https://img.shields.io/badge/dependencies-0%20(stdlib%20only)-brightgreen)](#features)
-[![Version](https://img.shields.io/badge/version-2.1.0-informational)](soc_log_anonymizer/__init__.py)
+[![Version](https://img.shields.io/badge/version-2.2.0-informational)](soc_log_anonymizer/__init__.py)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#installation)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-ff69b4)](#tests)
 
@@ -25,7 +25,9 @@
 
 ## 📖 Содержание
 
-- [✨ Возможности](#features)
+- [📓 Шпаргалка аналитика](docs/CHEATSHEET.md)
+- [🚫 Ложные срабатывания](docs/FALSE_POSITIVES.md)
+- [🧩 Свои regex](docs/CUSTOM_PATTERNS.md)
 - [📦 Установка](#installation)
 - [⚡ Быстрый старт](#quick-start)
 - [🖥️ GUI](#gui)
@@ -133,7 +135,7 @@
 <a id="installation"></a>
 ## Установка 📦
 
-Требуется Python 3.8+. Модуль `tkinter` (для GUI) обычно идёт в
+Требуется Python 3.9+. Модуль `tkinter` (для GUI) обычно идёт в
 комплекте с Python; в некоторых Linux-дистрибутивах нужно доставить
 системный пакет отдельно (`sudo apt install python3-tk` /
 `sudo dnf install python3-tkinter`). Для CLI и библиотеки `tkinter` не требуется.
@@ -196,7 +198,7 @@ macOS и Linux, собирайте на соответствующей ОС ил
 
 ### Windows 🪟
 
-Требуется установленный [Python 3.8+](https://www.python.org/downloads/)
+Требуется установленный [Python 3.9+](https://www.python.org/downloads/)
 (при установке отметьте галочку **"Add python.exe to PATH"**). После
 этого никакой дополнительной установки не нужно — в репозитории есть
 готовые `.bat`-файлы:
@@ -583,6 +585,13 @@ INI-файлом (формат определяется по расширени�
 | `org_name` | Название организации, маскируется как `[ORG_...]` |
 | `org_aliases` | Альтернативные написания/сокращения названия организации (например, `["Bank of Example", "BoE"]`) — маскируются наравне с `org_name` |
 | `org_aliases_share_pseudonym` | По умолчанию `false` — `org_name` и каждый `org_alias` получают РАЗНЫЕ псевдонимы (разные строки => разный хэш), даже если по смыслу это одна организация. При `true` — все буквальные упоминания сходятся к одному псевдониму от `org_name`; **не затрагивает** домены/email, где название организации входит как часть строки (`example.com` продолжает маскироваться самостоятельно как `[FQDN_...]`). Деанонимизация при `true` всегда восстанавливает каноническое `org_name`, а не конкретный алиас, встретившийся в этом месте текста |
+| `mask_types` | Если не пусто — маскировать только эти семьи (`USER`, `ORG`, `IP`, …). Не вендорские профили, а выключатели типов |
+| `skip_types` | Семьи, которые никогда не маскировать (например `["HASH","PHONE"]`) |
+| `allowlist` | Значения, которые оставлять как есть (`["8.8.8.8"]`) |
+| `hash_require_context` | `true` (по умолчанию): HASH в свободном тексте только рядом с hash/md5/sha/ntlm |
+| `json_preserve_formatting` | `true`: компактный JSON не pretty-print'ится через `indent=2` |
+| `multiline_join` | Склеивать syslog-продолжения с `\` и indented traceback |
+| `parse_structured` | Выделять hostname из RFC5424 перед generic-regex |
 | `hash_len` | Длина усечения HMAC-SHA256 в hex-символах (по умолчанию 12) |
 | `max_token_len` | Ограничение длины значения в key=value паттернах |
 | `max_input_size_mb` | Порог предупреждения о большом файле перед загрузкой целиком в память (по умолчанию 500). В GUI применяется и при открытии файла, и при прямой вставке/наборе текста в поле ввода |
@@ -674,7 +683,7 @@ JSON и путь к файлу (или, если файл ещё не найде
 | 🔒 Секреты (`password=`, `token:`, `Uname:`... — см. `secret_field_names`) | `password=hunter2` | тип определяется по значению, иначе `[SECRET_...]` |
 | 👤 Пользовательские поля (`user=`, `login:`, `Subject:`, `suser=`... — см. `user_field_names`/`cef_user_fields`) | `user=jdoe` | тип определяется по значению, иначе `[USER_...]` |
 | 🗣️ Упоминание пользователя без `=`/`:` (sshd/su/Cisco ASA/IOS) | `Accepted password for admin`, `for user "admin"`, `by admin on vty0` | `[USER_...]` |
-| 📁 Путь к профилю пользователя | `C:\Users\jdoe\...` | `[USER_...]` |
+| 📁 Путь к профилю пользователя | `C:\Users\jdoe\...` | `[USER_...]` (сам путь не маскируется, только логин) |
 | 🪪 Windows SID | `S-1-5-21-...` | `[SID_...]` (well-known — не маскируются) |
 | #️⃣ Хэш (MD5/SHA1/SHA256/NTLM) | `5f4dcc3b...` | `[HASH_...]` |
 | 🆔 UUID/GUID | `6ba7b810-9dad-...` | `[UUID_...]` (nil GUID — не маскируется) |

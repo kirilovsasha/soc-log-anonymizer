@@ -1,0 +1,25 @@
+{"id": "sshd", "input": "sshd[1]: Accepted password for alice from 10.0.0.5 port 22 ssh2", "must_keep": ["sshd", "port 22", "ssh2"], "must_not_contain": ["alice", "10.0.0.5"]}
+{"id": "http", "input": "client HTTP/1.1 GET /index.html IKEv2/AES256", "must_keep": ["HTTP/1.1", "IKEv2/AES256", "/index.html"], "must_not_contain": ["[PATH_"]}
+{"id": "date", "input": "event at 2026/09/16 10:22:01", "must_keep": ["2026/09/16"], "must_not_contain": ["[PATH_"]}
+{"id": "unix-path", "input": "tail /var/log/auth.log", "must_keep": ["/var/log/auth.log"], "must_not_contain": ["[PATH_"]}
+{"id": "hash-context", "input": "NTLM hash 5f4dcc3b5aa765d61d8327deb882cf99 stored", "must_keep": ["NTLM"], "must_not_contain": ["5f4dcc3b5aa765d61d8327deb882cf99"]}
+{"id": "hash-noise", "input": "request-id 5f4dcc3b5aa765d61d8327deb882cf99 accepted", "must_keep": ["5f4dcc3b5aa765d61d8327deb882cf99"], "must_not_contain": ["[HASH_"]}
+{"id": "fqdn-stop", "input": "wait for.local timeout", "must_keep": ["for.local"], "must_not_contain": ["[FQDN_"]}
+{"id": "fqdn-real", "input": "host db01.bank.local up", "must_keep": ["host"], "must_not_contain": ["db01.bank.local"]}
+{"id": "user-path", "input": "open C:\\Users\\jdoe\\secret.txt", "must_keep": ["C:\\Users\\", "secret.txt"], "must_not_contain": ["jdoe"]}
+{"id": "win-user", "input": "login CORP\\jdoe ok", "must_keep": ["login"], "must_not_contain": ["CORP\\jdoe"]}
+{"id": "pathish-user", "input": "loaded Windows\\System32\\drivers", "must_keep": ["Windows\\System32\\drivers"], "must_not_contain": ["[USER_"]}
+{"id": "cisco-user", "input": "%SYS-5-CONFIG_I: Configured from console by admin on vty0 (10.1.1.8)", "must_keep": ["on vty0"], "must_not_contain": ["by admin ", "10.1.1.8"]}
+{"id": "asa-https", "input": "Login permitted from 10.0.0.5/50234 to inside:10.0.0.1/https for user \"admin\"", "must_keep": ["/https", "/50234"], "must_not_contain": ["\"admin\"", "10.0.0.5"]}
+{"id": "checkpoint", "input": "action=Accept src=203.0.113.9 suser=jdoe duser=root", "must_keep": ["action=Accept"], "must_not_contain": ["jdoe", "203.0.113.9", "duser=root"]}
+{"id": "email", "input": "contact jdoe@bank.com please", "must_keep": ["contact"], "must_not_contain": ["jdoe@bank.com"]}
+{"id": "phone", "input": "call +375291234567 now", "must_keep": ["call"], "must_not_contain": ["+375291234567"]}
+{"id": "mac", "input": "nic 00:1A:2B:3C:4D:5E up", "must_keep": ["nic"], "must_not_contain": ["00:1A:2B:3C:4D:5E"]}
+{"id": "sid-custom", "input": "SID S-1-5-21-3623811015-3361044348-30300820-1013", "must_keep": ["SID"], "must_not_contain": ["S-1-5-21-3623811015-3361044348-30300820-1013"]}
+{"id": "sid-wellknown", "input": "SID S-1-5-18 LocalSystem", "must_keep": ["S-1-5-18"], "must_not_contain": ["[SID_"]}
+{"id": "uuid", "input": "id 6ba7b810-9dad-11d1-80b4-00c04fd430c8", "must_keep": ["id"], "must_not_contain": ["6ba7b810-9dad-11d1-80b4-00c04fd430c8"]}
+{"id": "nil-guid", "input": "empty 00000000-0000-0000-0000-000000000000", "must_keep": ["00000000-0000-0000-0000-000000000000"], "must_not_contain": ["[UUID_"]}
+{"id": "org", "input": "ticket for bank closed", "must_keep": ["ticket", "closed"], "must_not_contain": [" bank "]}
+{"id": "json-user", "input": "{\"user\":\"alice\",\"ok\":true,\"n\":1}", "must_keep": ["\"ok\": true", "\"n\": 1"], "must_not_contain": ["alice"]}
+{"id": "multiline", "input": "sshd: Failed password for bob from 10.2.2.2\\\n port 22", "must_keep": ["sshd"], "must_not_contain": [" bob ", "10.2.2.2"]}
+{"id": "rfc5424", "input": "<34>1 2026-09-16T10:22:01Z vpn.bank.local sshd - - - session opened", "must_keep": ["sshd", "session opened"], "must_not_contain": ["vpn.bank.local"]}

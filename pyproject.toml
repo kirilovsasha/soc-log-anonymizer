@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "soc-log-anonymizer"
-version = "2.1.0"
+version = "2.2.0"
 description = "Анонимизация логов SOC перед отправкой во внешнюю LLM (только стандартная библиотека Python)"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 authors = [
     { name = "SOC Log Anonymizer contributors" }
 ]
@@ -27,3 +27,11 @@ soc-log-anonymizer = "soc_log_anonymizer.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["soc_log_anonymizer*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true

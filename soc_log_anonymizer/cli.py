@@ -66,7 +66,6 @@ import sys
 import tracemalloc
 import csv
 import time
-import difflib
 import fnmatch
 from logging.handlers import RotatingFileHandler
 from typing import List, Optional, Tuple
@@ -385,6 +384,13 @@ def cmd_anonymize(args: argparse.Namespace) -> int:
     anonymizer = SOCLogAnonymizer(salt=salt, org_name=args.org, config=config)
     _register_atexit_cleanup(anonymizer)
     _save_salt_if_requested(args, anonymizer)
+
+    if getattr(args, "workers", 1) and args.workers > 1 and not getattr(args, "stream", False):
+        logger.warning(
+            "--workers без --stream игнорируется для одного файла в памяти. "
+            "Параллель по строкам: anonymize --stream --workers N. "
+            "Параллель по файлам: batch --workers N."
+        )
 
     if args.files:
         return _run_multi_file(args, anonymizer)
@@ -968,7 +974,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_anon.add_argument("--stream", action="store_true",
                          help="Построчная обработка (низкое потребление памяти на больших файлах)")
     p_anon.add_argument("--workers", type=int, default=1,
-                         help="Число процессов для параллельной обработки")
+                         help="Параллель только с --stream (по строкам). Для каталога — batch --workers")
     p_anon.add_argument("--mmap", dest="use_mmap", action="store_true",
                          help="Построчное чтение через mmap вместо обычного открытия файла "
                               "(--stream, однопоточный режим); эффективнее на очень больших файлах. "

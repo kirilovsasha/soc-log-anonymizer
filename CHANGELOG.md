@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 2.2.0
+
+- Removed generic PATH masking; protocol/date/cipher slashes stay intact.
+- Added `mask_types`, `skip_types`, `allowlist`, stricter HASH/FQDN/PHONE/USER filters,
+  JSON compact preservation, multiline join, RFC5424 host split, and `anonymize_result()`.
+- GUI: Scan preview, session mask/skip/allowlist fields, mapping type filter and jump-to-value,
+  large-file sidecar output; theme constants extracted to `gui_theme.py`.
+- Docs: analyst cheat sheet, false-positive catalog, custom-pattern guide; golden corpus tests.
+- Stopped masking filesystem paths as `PATH`. The old `/`-anywhere regex
+  treated protocol versions, dates, and cipher suites (`HTTP/1.1`,
+  `2026/09/16`, `IKEv2/AES256`) as paths. Usernames in home directories
+  (`C:\Users\jdoe`, `/home/jdoe`, `/Users/jdoe`) are still masked as `USER`.
 - Added scan reports in JSONL, JSON, and CSV formats with file sizes,
   replacement counts, line counts, changed-line positions, safety status,
   timing, and cache metrics.

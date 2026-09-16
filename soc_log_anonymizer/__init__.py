@@ -3,18 +3,20 @@ SOC Log Anonymizer — анонимизация логов для SOC-анали
 отправкой во внешнюю LLM. Только стандартная библиотека Python.
 
 Публичный API:
-    from soc_log_anonymizer import SOCLogAnonymizer, AnonymizerConfig
+    from soc_log_anonymizer import SOCLogAnonymizer, AnonymizerConfig, AnonymizeResult
 """
 
 from .anonymizer import SOCLogAnonymizer
 from .config import AnonymizerConfig
 from .io_utils import read_file_auto_encoding
+from .result import AnonymizeResult
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 
 __all__ = [
     "SOCLogAnonymizer",
     "AnonymizerConfig",
+    "AnonymizeResult",
     "read_file_auto_encoding",
     "__version__",
 ]

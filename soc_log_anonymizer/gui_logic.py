@@ -362,6 +362,7 @@ HOTKEYS: List[Tuple[str, str, str]] = [
     ("Ctrl+S", "save_file", "Сохранить результат"),
     ("Ctrl+Shift+C", "copy_result", "Скопировать результат в буфер обмена"),
     ("Ctrl+Enter", "start_processing_thread", "Анонимизировать"),
+    ("Ctrl+Shift+P", "start_scan_thread", "Scan: показать совпадения без маскирования"),
     ("Ctrl+D", "deanonymize_text", "Де-анонимизировать текст из левого окна"),
     # Не Ctrl+Z: tk.Text создан с undo=True, и Ctrl+Z пользователь ждёт
     # для отката СВОЕГО набора текста, а не операции анонимизации.
@@ -492,3 +493,35 @@ def format_result_payload(text: str, output_format: str) -> Tuple[str, str]:
             writer.writerow([index, line])
         return buffer.getvalue(), ".csv"
     return text, ".log"
+
+
+def format_scan_report(findings: List[dict], limit: int = 500) -> str:
+    """Human-readable scan listing (no masking)."""
+    if not findings:
+        return "Scan: совпадений не найдено. Лог не изменялся.\n"
+    lines = [
+        "Scan: что было бы замаскировано (лог не изменялся).",
+        f"Всего совпадений: {len(findings)}",
+        "",
+    ]
+    for item in findings[:limit]:
+        lines.append(f"L{item.get('line', '?')}\t{item.get('type', '')}\t{item.get('value', '')}")
+    if len(findings) > limit:
+        lines.append(f"... ещё {len(findings) - limit}")
+    return "\n".join(lines) + "\n"
+
+
+def mapping_rows_filtered(mapping: Dict[str, str], query: str, type_filter: str,
+                          type_of) -> List[Tuple[str, str]]:
+    q = (query or "").strip().lower()
+    tf = (type_filter or "").strip().upper()
+    if tf in ("", "ALL", "ВСЕ", "ВСЕ ТИПЫ"):
+        tf = ""
+    rows = []
+    for orig, pseudo in mapping.items():
+        if tf and type_of(pseudo) != tf:
+            continue
+        if q and q not in orig.lower() and q not in pseudo.lower():
+            continue
+        rows.append((orig, pseudo))
+    return rows

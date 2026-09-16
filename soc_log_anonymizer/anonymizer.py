@@ -92,7 +92,20 @@ from concurrent.futures import ProcessPoolExecutor
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 from .config import AnonymizerConfig
+from .detectors import (
+    DEFAULT_FQDN_STOPWORDS,
+    STRUCTURAL_TAGS,
+    family_for_tag,
+    is_allowlisted,
+    is_family_enabled,
+    is_plausible_fqdn,
+    is_plausible_free_text_hash,
+    is_plausible_phone,
+    is_plausible_windows_user,
+)
 from .io_utils import check_world_readable
+from .result import AnonymizeResult
+from .structured import join_continued_lines, mask_structured_line
 
 logger = logging.getLogger("soc_log_anonymizer")
 
@@ -134,7 +147,7 @@ class SOCLogAnonymizer:
     # специфичные форматы должны проверяться раньше более общих.
     CLASSIFY_ORDER = [
         "JWT", "SID", "HASH", "UUID", "MAC", "IP_NET", "IP", "EMAIL", "USER", "FQDN", "PHONE",
-        "URL", "TOKEN", "CLOUD_SECRET", "SSH_KEY", "CONN_STR", "PATH",
+        "URL", "TOKEN", "CLOUD_SECRET", "SSH_KEY", "CONN_STR",
     ]
 
     # Типы значений, для которых регистр значим и НЕ приводится к нижнему
@@ -320,9 +333,11 @@ class SOCLogAnonymizer:
                 r'(?:Data Source|Server|Host|User Id|Uid|Pwd|Database|Initial Catalog|ConnectionString)\s*=\s*[^;\n\r,\s]+(?:;\s*(?:Data Source|Server|Host|User Id|Uid|Pwd|Database|Initial Catalog|ConnectionString)\s*=\s*[^;\n\r,\s]+)+'
                 r')'
             )),
-            ("PATH", re.compile(
-                r'(?i)(?:[A-Za-z]:\\\\|/)(?:[A-Za-z0-9._-]+[\\/])*[A-Za-z0-9._-]+'
-            )),
+            # Файловые пути сами по себе НЕ маскируются: общий regex на "/"
+            # ловит протокольные хвосты (HTTP/1.1, IKEv2/AES256), даты
+            # (2026/09/16) и CIDR/порты, оставляя в логе шум вместо
+            # контекста. Имя пользователя в домашнем каталоге — отдельно,
+            # паттерном USER_PATH ниже.
 
             ("BASE64_CMD", re.compile(r'(?i)(-(?:e|enc|encodedcommand)\s+)([A-Za-z0-9+/=]{20,2000})')),
 
@@ -349,7 +364,9 @@ class SOCLogAnonymizer:
 
             ("AUTH_USER_CISCO", re.compile(r'(?i)(\bby\s+)([A-Za-z0-9_.-]+)(?=\s+on\s+vty)')),
 
-            ("USER_PATH", re.compile(r'(?i)(?:C:\\Users\\|/home/|/Users/)([A-Za-z0-9._-]+)')),
+            ("USER_PATH", re.compile(
+                r'(?i)(?:[A-Za-z]:\\Users\\|/home/|/Users/)([A-Za-z0-9._-]+)'
+            )),
 
             ("SID", re.compile(r'\bS-\d-\d+(?:-\d+)+\b')),
 
@@ -363,7 +380,10 @@ class SOCLogAnonymizer:
 
             ("FQDN", re.compile(rf'\b(?:[a-zA-Z0-9-]+\.)+(?:{tld_alt})\b', re.IGNORECASE)),
 
-            ("USER", re.compile(r'\b[A-Za-z0-9_-]+\\[A-Za-z0-9._-]+\b')),
+            # Windows DOMAIN\user. Lookbehind (?<![\\]) отсекает сегменты
+            # пути вроде Windows\System32 после C:\ — иначе после отказа
+            # от generic PATH они маскировались бы как логин.
+            ("USER", re.compile(r'(?<![\\])\b[A-Za-z0-9_-]+\\[A-Za-z0-9._-]+\b')),
 
             ("MAC", re.compile(r'\b(?:[0-9a-fA-F]{4}\.[0-9a-fA-F]{4}\.[0-9a-fA-F]{4}|(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2})\b')),
 
@@ -430,6 +450,21 @@ class SOCLogAnonymizer:
     # Классификация и хэширование значений
     # ------------------------------------------------------------------
 
+    def _type_enabled(self, tag: str) -> bool:
+        family = family_for_tag(tag)
+        return is_family_enabled(family, self.config.mask_types, self.config.skip_types)
+
+    def _fqdn_stopwords(self):
+        extra = {s.lower() for s in self.config.fqdn_stopwords}
+        return set(DEFAULT_FQDN_STOPWORDS) | extra
+
+    def _should_keep_value(self, val: str, tag: str) -> bool:
+        if is_allowlisted(val, self.config.allowlist):
+            return True
+        if not self._type_enabled(tag):
+            return True
+        return False
+
     def _classify_value(self, val: str) -> str:
         """Определяет тип "сырого" значения (извлечённого из key=value,
         JSON-поля и т.п.), чтобы хэшировать его с тем же префиксом, что и
@@ -454,10 +489,21 @@ class SOCLogAnonymizer:
 
     def _classify_value_uncached(self, v: str) -> str:
         for tag in self.CLASSIFY_ORDER:
+            if not self._type_enabled(tag):
+                continue
             pattern = self.patterns_dict.get(tag)
             if not pattern or not pattern.fullmatch(v):
                 continue
             if tag == "IP" and not self._is_valid_ip(v):
+                continue
+            if tag == "HASH" and not is_plausible_free_text_hash(
+                    v, v, 0, len(v), require_context=False):
+                continue
+            if tag == "FQDN" and not is_plausible_fqdn(v, self._fqdn_stopwords()):
+                continue
+            if tag == "PHONE" and not is_plausible_phone(v):
+                continue
+            if tag == "USER" and not is_plausible_windows_user(v):
                 continue
             return tag
         return "VALUE"
@@ -473,6 +519,8 @@ class SOCLogAnonymizer:
         всех типов, КРОМЕ перечисленных в CASE_SENSITIVE_TYPES (пароли,
         токены и т.п.) — для них регистр является частью самого секрета
         и не должен "схлопываться" (см. docstring модуля, пункт 7)."""
+        if self._should_keep_value(val, prefix):
+            return val
         self.stats[prefix] += 1
 
         normalized = val if prefix in self.CASE_SENSITIVE_TYPES else val.lower()
@@ -659,6 +707,46 @@ class SOCLogAnonymizer:
             return candidate
         return self._hash_val(candidate, "IP")
 
+    def _sub_hash(self, m: "re.Match") -> str:
+        value = m.group(0)
+        if not is_plausible_free_text_hash(
+                value, m.string, m.start(), m.end(),
+                require_context=self.config.hash_require_context):
+            return value
+        return self._hash_val(value, "HASH")
+
+    def _sub_fqdn(self, m: "re.Match") -> str:
+        value = m.group(0)
+        if not is_plausible_fqdn(value, self._fqdn_stopwords()):
+            return value
+        return self._hash_val(value, "FQDN")
+
+    def _sub_phone(self, m: "re.Match") -> str:
+        value = m.group(0)
+        if not is_plausible_phone(value):
+            return value
+        return self._hash_val(value, "PHONE")
+
+    def _sub_windows_user(self, m: "re.Match") -> str:
+        value = m.group(0)
+        if not is_plausible_windows_user(value):
+            return value
+        return self._hash_val(value, "USER")
+
+    def _mask_structured_token(self, value: str) -> str:
+        if not value:
+            return value
+        return self._hash_classified(value, "VALUE")
+
+    def _dumps_json(self, obj: Any, original: Optional[str] = None) -> str:
+        if original and self.config.json_preserve_formatting and "\n" not in original.strip():
+            return json.dumps(obj, ensure_ascii=False)
+        if original and "\n" in original.strip():
+            return json.dumps(obj, ensure_ascii=False, indent=2)
+        if not self.config.json_preserve_formatting:
+            return json.dumps(obj, ensure_ascii=False, indent=2)
+        return json.dumps(obj, ensure_ascii=False)
+
     # ------------------------------------------------------------------
     # Публичные методы анонимизации
     # ------------------------------------------------------------------
@@ -666,23 +754,46 @@ class SOCLogAnonymizer:
     def _anonymize_text_impl(self, text: str) -> str:
         """Фактическая реализация без защиты от таймаута — вызывается
         через безопасную обёртку `anonymize_text` (см. ниже)."""
+        if self.config.multiline_join:
+            text = join_continued_lines(text)
+        if self.config.parse_structured:
+            parts = []
+            for line in text.splitlines(keepends=True):
+                parts.append(mask_structured_line(line, self._mask_structured_token))
+            text = "".join(parts)
         for prefix, pattern in self.patterns:
+            if prefix not in STRUCTURAL_TAGS and not prefix.startswith("CUSTOM:"):
+                if not self._type_enabled(prefix):
+                    continue
             if prefix == "CEF_KV":
                 text = pattern.sub(self._sub_cef_kv, text)
             elif prefix == "SECRET":
-                text = pattern.sub(self._sub_key_value_generic("SECRET"), text)
+                if self._type_enabled("SECRET"):
+                    text = pattern.sub(self._sub_key_value_generic("SECRET"), text)
             elif prefix == "USER_FIELD":
-                text = pattern.sub(self._sub_key_value_generic("USER"), text)
+                if self._type_enabled("USER"):
+                    text = pattern.sub(self._sub_key_value_generic("USER"), text)
             elif prefix in ("AUTH_USER", "AUTH_USER_CISCO"):
-                text = pattern.sub(self._sub_force_tag("USER"), text)
+                if self._type_enabled("USER"):
+                    text = pattern.sub(self._sub_force_tag("USER"), text)
             elif prefix == "ORG":
                 text = pattern.sub(self._sub_org, text)
             elif prefix == "IP":
                 text = pattern.sub(self._sub_ip, text)
+            elif prefix == "HASH":
+                text = pattern.sub(self._sub_hash, text)
+            elif prefix == "FQDN":
+                text = pattern.sub(self._sub_fqdn, text)
+            elif prefix == "PHONE":
+                text = pattern.sub(self._sub_phone, text)
+            elif prefix == "USER":
+                text = pattern.sub(self._sub_windows_user, text)
             elif prefix == "BASE64_CMD":
-                text = pattern.sub(self._sub_base64_cmd, text)
+                if self._type_enabled("SECRET"):
+                    text = pattern.sub(self._sub_base64_cmd, text)
             elif prefix == "USER_PATH":
-                text = pattern.sub(self._sub_user_path, text)
+                if self._type_enabled("USER"):
+                    text = pattern.sub(self._sub_user_path, text)
             elif prefix == "SID":
                 text = pattern.sub(self._sub_sid, text)
             elif prefix == "UUID":
@@ -850,7 +961,7 @@ class SOCLogAnonymizer:
             parsed = self._try_parse_json(text_str)
             if parsed is not None:
                 anonymized_obj = self.anonymize_json(parsed)
-                return json.dumps(anonymized_obj, ensure_ascii=False, indent=2)
+                return self._dumps_json(anonymized_obj, text_str)
 
         lines = text.splitlines()
         non_empty = [l for l in lines if l.strip()]
@@ -863,12 +974,25 @@ class SOCLogAnonymizer:
                     continue
                 parsed = self._try_parse_json(stripped)
                 if parsed is not None:
-                    out_lines.append(json.dumps(self.anonymize_json(parsed), ensure_ascii=False))
+                    out_lines.append(self._dumps_json(self.anonymize_json(parsed), stripped))
                 else:
                     out_lines.append(self.anonymize_text(line))
             return "\n".join(out_lines)
 
         return self.anonymize_text(text)
+
+    def anonymize_result(self, text: str) -> AnonymizeResult:
+        """Like anonymize(), plus stats/mapping/verify in one object."""
+        out = self.anonymize(text)
+        safe, issues = self.verify(out)
+        return AnonymizeResult(
+            text=out,
+            stats=self.get_stats(),
+            mapping=dict(self.mapping_table),
+            issues=list(issues),
+            safe=safe,
+            metrics=self.get_metrics(),
+        )
 
     def anonymize_line(self, line: str) -> str:
         """Анонимизация одной строки — используется для построчного
@@ -882,7 +1006,7 @@ class SOCLogAnonymizer:
         if body.startswith(("{", "[")):
             parsed = self._try_parse_json(body)
             if parsed is not None:
-                return json.dumps(self.anonymize_json(parsed), ensure_ascii=False) + trailing
+                return self._dumps_json(self.anonymize_json(parsed), body) + trailing
         return self.anonymize_text(stripped) + trailing
 
     def anonymize_stream(self, lines: Iterable[str]) -> Iterator[str]:
@@ -966,7 +1090,25 @@ class SOCLogAnonymizer:
                     continue
                 if tag == "SID" and value.upper() in self.well_known_sids:
                     continue
-                matches.append({"type": tag, "value": value, "start": match.start(), "end": match.end()})
+                if is_allowlisted(value, self.config.allowlist):
+                    continue
+                if tag not in STRUCTURAL_TAGS and not tag.startswith("CUSTOM:") and not self._type_enabled(tag):
+                    continue
+                if tag == "HASH" and not is_plausible_free_text_hash(
+                        value, text, match.start(), match.end(),
+                        require_context=self.config.hash_require_context):
+                    continue
+                if tag == "FQDN" and not is_plausible_fqdn(value, self._fqdn_stopwords()):
+                    continue
+                if tag == "PHONE" and not is_plausible_phone(value):
+                    continue
+                if tag == "USER" and not is_plausible_windows_user(value):
+                    continue
+                matches.append({
+                    "type": tag, "value": value,
+                    "start": match.start(), "end": match.end(),
+                    "line": text.count("\n", 0, match.start()) + 1,
+                })
         return matches
 
     def get_quality_report(self, text: str) -> Dict[str, Any]:
@@ -995,25 +1137,40 @@ class SOCLogAnonymizer:
         issues = []
         for tag, pattern in self.patterns:
             if tag in ("CEF_KV", "SECRET", "USER_FIELD", "USER_PATH", "BASE64_CMD",
-                       "AUTH_USER", "AUTH_USER_CISCO"):
+                       "AUTH_USER", "AUTH_USER_CISCO") or tag.startswith("CUSTOM:"):
+                continue
+            if not self._type_enabled(tag):
+                continue
+
+            def _leftovers():
+                for match in pattern.finditer(text):
+                    value = match.group(0)
+                    if is_allowlisted(value, self.config.allowlist):
+                        continue
+                    if tag == "IP" and not self._is_valid_ip(value):
+                        continue
+                    if tag == "UUID" and value.lower() == self.nil_guid:
+                        continue
+                    if tag == "SID" and value.upper() in self.well_known_sids:
+                        continue
+                    if tag == "HASH" and not is_plausible_free_text_hash(
+                            value, text, match.start(), match.end(),
+                            require_context=self.config.hash_require_context):
+                        continue
+                    if tag == "FQDN" and not is_plausible_fqdn(value, self._fqdn_stopwords()):
+                        continue
+                    if tag == "PHONE" and not is_plausible_phone(value):
+                        continue
+                    if tag == "USER" and not is_plausible_windows_user(value):
+                        continue
+                    yield value
+
+            leftovers = list(_leftovers())
+            if not leftovers:
                 continue
             if tag == "ORG":
-                if pattern.search(text):
-                    issues.append("Обнаружено наименование организации")
-                continue
-            if tag == "SID":
-                if any(m.group(0).upper() not in self.well_known_sids for m in pattern.finditer(text)):
-                    issues.append("Обнаружены незамаскированные данные типа SID")
-                continue
-            if tag == "UUID":
-                if any(m.group(0).lower() != self.nil_guid for m in pattern.finditer(text)):
-                    issues.append("Обнаружены незамаскированные данные типа UUID")
-                continue
-            if tag == "IP":
-                if any(self._is_valid_ip(m.group(0)) for m in pattern.finditer(text)):
-                    issues.append("Обнаружены незамаскированные данные типа IP")
-                continue
-            if pattern.search(text):
+                issues.append("Обнаружено наименование организации")
+            else:
                 issues.append(f"Обнаружены незамаскированные данные типа {tag}")
         return len(issues) == 0, issues
 

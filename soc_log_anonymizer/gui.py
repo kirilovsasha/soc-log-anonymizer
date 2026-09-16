@@ -22,6 +22,22 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from .anonymizer import SOCLogAnonymizer
 from .audit import log_audit_event
 from .config import AnonymizerConfig, find_default_config_path, _app_dir
+from .gui_session import (
+    extract_session_profile,
+    format_csv,
+    parse_csv_types,
+    parse_csv_values,
+    session_fields_from_config,
+)
+from .gui_theme import (
+    HIGHLIGHT_TAG_NAMES,
+    PALETTE_DARK,
+    PALETTE_LIGHT,
+    TAG_COLORS_DARK,
+    TAG_COLORS_LIGHT,
+    _TYPE_LEGEND_RU,
+    pseudonym_type as _pseudonym_type,
+)
 from .gui_logic import (
     HOTKEYS,
     accelerator_to_sequence,
@@ -40,6 +56,9 @@ from .gui_logic import (
     status_style_name,
     summarize_active_rules,
     truncate_display_text,
+    validate_regex_pattern,
+    format_scan_report,
+    mapping_rows_filtered,
 )
 from .io_utils import format_size_mb, read_file_auto_encoding
 
@@ -57,131 +76,6 @@ FONT_UI = "Segoe UI"
 FONT_MONO = "Consolas"
 
 PLACEHOLDER_FG = "_placeholder_"  # маркер-состояние, см. _add_placeholder
-
-# ----------------------------------------------------------------------
-# Цветовые палитры. Всё темизируемое оформление построено ИСКЛЮЧИТЕЛЬНО
-# через именованные ttk.Style — виджет хранит ссылку на ИМЯ стиля
-# ("Primary.TButton", "StatusSuccess.TLabel" и т.д.), а не на конкретный
-# цвет. Переключение темы = переконфигурация стилей с этими именами
-# (_configure_styles), и все виджеты, ссылающиеся на них, обновляются
-# автоматически. Это устраняет целый класс багов "часть окна не
-# перекрасилась при переключении темы", свойственных ручному обходу
-# дерева виджетов и точечной установке bg/fg.
-#
-# Единственное исключение — tk.Text (у ttk нет многострочного
-# редактируемого текстового виджета), его перекрашиваем вручную в
-# _configure_styles() при каждом вызове.
-# ----------------------------------------------------------------------
-
-PALETTE_LIGHT = {
-    "bg": "#eef0f4", "surface": "#ffffff", "surface_alt": "#f5f6fa", "border": "#e1e4ea",
-    "text": "#1f2430", "text_secondary": "#6b7280",
-    "accent": "#4f46e5", "accent_hover": "#4338ca", "accent_fg": "#ffffff",
-    "purple": "#7c3aed", "purple_hover": "#6d28d9",
-    "success": "#16a34a", "danger": "#dc2626", "danger_hover": "#b91c1c",
-    "warning": "#d97706", "warning_fg": "#3a2a06",
-    "input_bg": "#ffffff", "input_fg": "#1f2430",
-    "highlight_bg": "#e0e7ff", "highlight_fg": "#3730a3",
-    "disabled_bg": "#e5e7eb", "disabled_fg": "#9ca3af",
-}
-
-PALETTE_DARK = {
-    "bg": "#14161c", "surface": "#1c1f27", "surface_alt": "#20242e", "border": "#2b2f3a",
-    "text": "#e5e7eb", "text_secondary": "#9aa0ac",
-    "accent": "#6366f1", "accent_hover": "#818cf8", "accent_fg": "#ffffff",
-    "purple": "#a78bfa", "purple_hover": "#c4b5fd",
-    "success": "#22c55e", "danger": "#f87171", "danger_hover": "#fca5a5",
-    "warning": "#fbbf24", "warning_fg": "#3a2a06",
-    "input_bg": "#20242e", "input_fg": "#e5e7eb",
-    "highlight_bg": "#312e81", "highlight_fg": "#c7d2fe",
-    "disabled_bg": "#2b2f3a", "disabled_fg": "#6b7280",
-}
-
-# ----------------------------------------------------------------------
-# Цвета подсветки псевдонимов ПО ТИПУ данных (IP/EMAIL/USER/SECRET/...),
-# вместо одного общего цвета — так в окне результата и в diff'е сразу
-# видно не только ЧТО заменено, но и КАКОГО РОДА была замена. Тип
-# определяется по префиксу самого псевдонима (см. _pseudonym_type),
-# поэтому подсветка работает даже без доступа к исходному значению.
-# "VALUE" — цвет для типов без специальной классификации (совпадает со
-# старым единым цветом "highlight", ради визуальной преемственности).
-# ----------------------------------------------------------------------
-
-TAG_COLORS_LIGHT = {
-    "IP":      ("#dbeafe", "#1e40af"),
-    "IP_NET":  ("#c7d2fe", "#3730a3"),
-    "EMAIL":   ("#dcfce7", "#166534"),
-    "USER":    ("#fef9c3", "#854d0e"),
-    "FQDN":    ("#ffedd5", "#9a3412"),
-    "ORG":     ("#fae8ff", "#86198f"),
-    "SID":     ("#e0f2fe", "#075985"),
-    "UUID":    ("#f3e8ff", "#6b21a8"),
-    "MAC":     ("#fce7f3", "#9d174d"),
-    "PHONE":   ("#ccfbf1", "#115e59"),
-    "HASH":    ("#e5e7eb", "#374151"),
-    "JWT":     ("#fee2e2", "#991b1b"),
-    "SECRET":  ("#fecaca", "#7f1d1d"),
-    "B64_CMD": ("#fed7aa", "#7c2d12"),
-    "VALUE":   ("#e0e7ff", "#3730a3"),
-}
-
-TAG_COLORS_DARK = {
-    "IP":      ("#1e3a8a", "#bfdbfe"),
-    "IP_NET":  ("#312e81", "#c7d2fe"),
-    "EMAIL":   ("#14532d", "#bbf7d0"),
-    "USER":    ("#713f12", "#fef08a"),
-    "FQDN":    ("#7c2d12", "#fed7aa"),
-    "ORG":     ("#701a75", "#f5d0fe"),
-    "SID":     ("#0c4a6e", "#bae6fd"),
-    "UUID":    ("#581c87", "#e9d5ff"),
-    "MAC":     ("#831843", "#fbcfe8"),
-    "PHONE":   ("#134e4a", "#99f6e4"),
-    "HASH":    ("#374151", "#e5e7eb"),
-    "JWT":     ("#7f1d1d", "#fecaca"),
-    "SECRET":  ("#7f1d1d", "#fca5a5"),
-    "B64_CMD": ("#7c2d12", "#fdba74"),
-    "VALUE":   ("#312e81", "#c7d2fe"),
-}
-
-# Отсортировано по убыванию длины: важно для корректного разбора префикса
-# псевдонима вида "[IP_NET_ab12cd34]" — без сортировки "IP" совпал бы
-# раньше "IP_NET" и тип определился бы неверно.
-_PSEUDONYM_TYPE_PREFIXES = sorted(TAG_COLORS_LIGHT.keys(), key=len, reverse=True)
-
-# Развёрнутые описания типов для легенды HTML diff-отчёта (см.
-# export_diff_html) — не просто "IP", а понятное объяснение, что именно
-# под этим типом скрывается и в каком формате оно встречалось в исходном
-# логе.
-_TYPE_LEGEND_RU = {
-    "IP":      ("IP-адрес", "отдельный IPv4- или IPv6-адрес, например 10.0.0.5"),
-    "IP_NET":  ("IP-адрес с подсетью/портом", "запись вида 10.0.0.0/24 или адрес с портом"),
-    "EMAIL":   ("Email-адрес", "например jdoe@example.com"),
-    "USER":    ("Пользователь / логин", "имя пользователя, Windows-логин DOMAIN\\user или путь к профилю"),
-    "FQDN":    ("Хост / домен (FQDN)", "полное доменное имя, например db01.example.com"),
-    "ORG":     ("Название организации", "название компании из настроек анонимизации (org_name/org_aliases)"),
-    "SID":     ("Windows SID", "идентификатор безопасности вида S-1-5-21-..."),
-    "UUID":    ("UUID / GUID", "уникальный идентификатор вида 6ba7b810-9dad-..."),
-    "MAC":     ("MAC-адрес", "аппаратный адрес сетевого интерфейса"),
-    "PHONE":   ("Номер телефона", "телефонный номер с одним из настроенных префиксов"),
-    "HASH":    ("Хэш", "MD5/SHA1/SHA256/NTLM-хэш"),
-    "JWT":     ("JWT-токен", "токен вида eyJhbGci..."),
-    "SECRET":  ("Секрет / пароль", "значение поля password=/token=/secret= и т.п."),
-    "B64_CMD": ("Base64-команда", "закодированная команда PowerShell (-enc ...)"),
-    "VALUE":   ("Прочее чувствительное значение", "значение, не подошедшее ни под один более специфичный тип"),
-}
-HIGHLIGHT_TAG_NAMES = [f"hl_{t}" for t in TAG_COLORS_LIGHT]
-
-
-def _pseudonym_type(pseudo: str) -> str:
-    """Определяет тип псевдонима по его префиксу: "[EMAIL_ab12cd34ef56]"
-    -> "EMAIL", "[IP_NET_...]" -> "IP_NET". Неизвестный/нестандартный
-    формат (например, из mapping-файла старой версии инструмента) даёт
-    безопасный fallback "VALUE"."""
-    inner = pseudo.strip("[]")
-    for prefix in _PSEUDONYM_TYPE_PREFIXES:
-        if inner == prefix or inner.startswith(prefix + "_"):
-            return prefix
-    return "VALUE"
 
 # Статусные "чипы" (badge) для status_label: имя_состояния -> (фон, текст).
 # Определяются относительно палитры в _configure_styles().
@@ -263,6 +157,7 @@ class AnonymizerGUI:
         self._cancel_event = threading.Event()
         self._loaded_files: List[str] = []
         self._full_input_text: Optional[str] = None
+        self._full_output_text: Optional[str] = None
         self._input_display_truncated = False
         # Диапазоны (start, end) в символах — не номера строк: подсветка
         # и навигация идут по конкретным заменённым значениям.
@@ -359,6 +254,16 @@ class AnonymizerGUI:
             self.font_size.set(DEFAULT_FONT_SIZE)
         self._configure_styles()
         self._apply_font_size()
+        profile = extract_session_profile(self._gui_state)
+        if hasattr(self, "entry_org") and profile.get("org_name"):
+            self._set_widget_content(self.entry_org, profile["org_name"])
+        if hasattr(self, "entry_mask_types"):
+            self.entry_mask_types.delete(0, tk.END)
+            self.entry_mask_types.insert(0, format_csv(profile.get("mask_types") or self.config.mask_types))
+            self.entry_skip_types.delete(0, tk.END)
+            self.entry_skip_types.insert(0, format_csv(profile.get("skip_types") or self.config.skip_types))
+            self.entry_allowlist.delete(0, tk.END)
+            self.entry_allowlist.insert(0, format_csv(profile.get("allowlist") or self.config.allowlist))
         self.root.after_idle(self._restore_editor_sash)
 
     def _restore_editor_sash(self) -> None:
@@ -377,6 +282,14 @@ class AnonymizerGUI:
             "dark_mode": bool(self.dark_mode.get()),
             "font_size": int(self.font_size.get()),
         }
+        if hasattr(self, "entry_org"):
+            org = self._entry_value(self.entry_org) or self.config.org_name
+            state.update(session_fields_from_config(
+                org,
+                parse_csv_types(self.entry_mask_types.get()) if hasattr(self, "entry_mask_types") else self.config.mask_types,
+                parse_csv_types(self.entry_skip_types.get()) if hasattr(self, "entry_skip_types") else self.config.skip_types,
+                parse_csv_values(self.entry_allowlist.get()) if hasattr(self, "entry_allowlist") else self.config.allowlist,
+            ))
         try:
             state["editor_sash"] = int(self.editor_paned.sashpos(0))
         except (AttributeError, tk.TclError):
@@ -944,6 +857,9 @@ class AnonymizerGUI:
         self.btn_process = ttk.Button(primary_actions, text=f"{ICON_RUN}  Анонимизировать", style="Primary.TButton",
                                        command=self.start_processing_thread)
         self.btn_process.pack(side=tk.LEFT, padx=6)
+        self.btn_scan = ttk.Button(primary_actions, text="Scan", style="Ghost.TButton",
+                                   command=self.start_scan_thread)
+        self.btn_scan.pack(side=tk.LEFT, padx=6)
 
         self.btn_cancel = ttk.Button(primary_actions, text="Отменить обработку",
                                      style="Danger.TButton", command=self.cancel_operation,
@@ -1008,6 +924,18 @@ class AnonymizerGUI:
         self.sync_scroll_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(settings_row, text="Синхронный скролл", variable=self.sync_scroll_var
                          ).pack(side=tk.LEFT)
+
+        types_row = ttk.Frame(session_tab, style="Card.TFrame")
+        types_row.pack(fill=tk.X, padx=8, pady=(0, 8))
+        ttk.Label(types_row, text="mask_types", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
+        self.entry_mask_types = ttk.Entry(types_row, width=18, font=(FONT_UI, 9))
+        self.entry_mask_types.pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(types_row, text="skip_types", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
+        self.entry_skip_types = ttk.Entry(types_row, width=18, font=(FONT_UI, 9))
+        self.entry_skip_types.pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(types_row, text="allowlist", style="Muted.TLabel").pack(side=tk.LEFT, padx=(0, 4))
+        self.entry_allowlist = ttk.Entry(types_row, width=22, font=(FONT_UI, 9))
+        self.entry_allowlist.pack(side=tk.LEFT)
 
         status_bar = ttk.Frame(main, style="StatusBar.TFrame")
         status_bar.pack(fill=tk.X, padx=12, pady=(0, 8))
@@ -1120,6 +1048,11 @@ class AnonymizerGUI:
         self.entry_search = ttk.Entry(search_row, width=28, font=(FONT_UI, 9))
         self.entry_search.pack(side=tk.LEFT)
         self.entry_search.bind("<KeyRelease>", self.filter_mapping_table)
+        self.mapping_type_filter = ttk.Combobox(
+            search_row, values=("Все типы",), state="readonly", width=12)
+        self.mapping_type_filter.set("Все типы")
+        self.mapping_type_filter.pack(side=tk.LEFT, padx=8)
+        self.mapping_type_filter.bind("<<ComboboxSelected>>", self.filter_mapping_table)
 
         ttk.Button(search_row, text=f"{ICON_LOCK}  Экспорт JSON (mapping)", style="Ghost.TButton",
                    command=self.export_mapping_json).pack(side=tk.RIGHT, padx=(6, 0))
@@ -1151,6 +1084,7 @@ class AnonymizerGUI:
 
         self.map_tree.bind("<Motion>", self._on_tree_motion)
         self.map_tree.bind("<Leave>", lambda e: self._hide_tooltip())
+        self.map_tree.bind("<Double-1>", self._jump_from_mapping)
 
         # --- Вкладка "Конфигурация" ---
         config_banner_outer, config_banner_card = self._card(tab_config)
@@ -1814,7 +1748,7 @@ class AnonymizerGUI:
                                  if parts else "")
 
     def save_file(self):
-        result_text = self.txt_output.get("1.0", tk.END).strip()
+        result_text = (self._full_output_text or self.txt_output.get("1.0", tk.END)).strip()
         if not result_text:
             messagebox.showwarning("Предупреждение", "Нет данных для сохранения!")
             return
@@ -1913,6 +1847,7 @@ class AnonymizerGUI:
         self._set_progress(0)
         self._set_status("Обработка…", "Info")
 
+        self._apply_session_filters()
         new_anonymizer = SOCLogAnonymizer(salt=salt, org_name=org_name, config=self.config)
 
         threading.Thread(
@@ -1920,6 +1855,32 @@ class AnonymizerGUI:
             args=(raw_text, new_anonymizer),
             daemon=True
         ).start()
+
+    def _apply_session_filters(self) -> None:
+        if not hasattr(self, "entry_mask_types"):
+            return
+        self.config.mask_types = parse_csv_types(self.entry_mask_types.get())
+        self.config.skip_types = parse_csv_types(self.entry_skip_types.get())
+        self.config.allowlist = parse_csv_values(self.entry_allowlist.get())
+
+    def start_scan_thread(self):
+        raw_text = self._text_value(self.txt_input)
+        if not raw_text:
+            messagebox.showwarning("Предупреждение", "Введите или загрузите текст логов!")
+            return
+        self._apply_session_filters()
+        org_name = self._entry_value(self.entry_org) or self.config.org_name
+        scanner = SOCLogAnonymizer(salt="scan-preview", org_name=org_name, config=self.config)
+        findings = [item for item in scanner.find_matches(raw_text)
+                    if item["type"] not in ("CEF_KV", "SECRET", "USER_FIELD",
+                                            "AUTH_USER", "AUTH_USER_CISCO", "USER_PATH",
+                                            "BASE64_CMD")]
+        report = format_scan_report(findings)
+        self.txt_output.delete("1.0", tk.END)
+        self.txt_output.insert(tk.END, report)
+        self._full_output_text = None
+        self._set_status(f"Scan: {len(findings)} совпадений, лог не маскировался", "Info")
+        scanner.clear_sensitive_data()
 
     def _async_process(self, raw_text: str, new_anonymizer: SOCLogAnonymizer):
         stripped = raw_text.strip()
@@ -1993,7 +1954,20 @@ class AnonymizerGUI:
         self._reset_session_timer()
 
         self.txt_output.delete("1.0", tk.END)
-        self.txt_output.insert(tk.END, cleaned_text)
+        display, truncated = truncate_display_text(cleaned_text, GUI_DISPLAY_CHAR_LIMIT)
+        self._full_output_text = cleaned_text if truncated else None
+        self.txt_output.insert(tk.END, display)
+        if truncated and self._loaded_files:
+            out_path = self._loaded_files[0] + ".anon.log"
+            try:
+                with open(out_path, "w", encoding="utf-8") as handle:
+                    handle.write(cleaned_text)
+                self._set_status(
+                    f"Полный результат записан в {os.path.basename(out_path)}; в окне превью",
+                    "Warning",
+                )
+            except OSError as exc:
+                logger.warning("Could not write preview sidecar: %s", exc)
         self.refresh_mapping_table()
         self._refresh_diff_highlighting()
         self.btn_process.config(state=tk.NORMAL)
@@ -2270,20 +2244,42 @@ class AnonymizerGUI:
     # ------------------------------------------------------------------
 
     def refresh_mapping_table(self):
-        for item in self.map_tree.get_children():
-            self.map_tree.delete(item)
+        types = {"Все типы"}
         if self.anonymizer and self.anonymizer.mapping_table:
-            for orig, pseudo in self.anonymizer.mapping_table.items():
-                self.map_tree.insert("", tk.END, values=(orig, pseudo))
+            types.update(_pseudonym_type(p) for p in self.anonymizer.mapping_table.values())
+        if hasattr(self, "mapping_type_filter"):
+            current = self.mapping_type_filter.get() or "Все типы"
+            self.mapping_type_filter.configure(values=tuple(sorted(types, key=lambda x: (x != "Все типы", x))))
+            if current not in types:
+                current = "Все типы"
+            self.mapping_type_filter.set(current)
+        self.filter_mapping_table()
 
     def filter_mapping_table(self, event=None):
-        query = self.entry_search.get().strip().lower()
+        query = self.entry_search.get().strip() if hasattr(self, "entry_search") else ""
+        type_filter = self.mapping_type_filter.get() if hasattr(self, "mapping_type_filter") else ""
         for item in self.map_tree.get_children():
             self.map_tree.delete(item)
-        if self.anonymizer and self.anonymizer.mapping_table:
-            for orig, pseudo in self.anonymizer.mapping_table.items():
-                if query in orig.lower() or query in pseudo.lower():
-                    self.map_tree.insert("", tk.END, values=(orig, pseudo))
+        mapping = getattr(self.anonymizer, "mapping_table", None) or {}
+        for orig, pseudo in mapping_rows_filtered(mapping, query, type_filter, _pseudonym_type):
+            self.map_tree.insert("", tk.END, values=(orig, pseudo))
+
+    def _jump_from_mapping(self, event=None):
+        selection = self.map_tree.selection()
+        if not selection:
+            return
+        orig = str(self.map_tree.item(selection[0], "values")[0])
+        haystack = self._text_value(self.txt_input)
+        idx = haystack.find(orig)
+        if idx < 0:
+            self._set_status("Значение не найдено в Input", "Warning")
+            return
+        self.notebook.select(0)
+        start = f"1.0 + {idx} chars"
+        self.txt_input.tag_remove("sel", "1.0", tk.END)
+        self.txt_input.tag_add("sel", start, f"1.0 + {idx + len(orig)} chars")
+        self.txt_input.see(start)
+        self._set_status("Переход к значению в Input", "Info")
 
     def export_mapping_csv(self):
         if not self.anonymizer or not self.anonymizer.mapping_table:
@@ -2335,7 +2331,7 @@ class AnonymizerGUI:
         )
 
     def copy_result(self):
-        result_text = self.txt_output.get("1.0", tk.END).strip()
+        result_text = (self._full_output_text or self.txt_output.get("1.0", tk.END)).strip()
         if result_text:
             self.root.clipboard_clear()
             self.root.clipboard_append(result_text)

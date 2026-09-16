@@ -28,5 +28,12 @@
   "phone_prefixes": ["+375", "+7", "+1", "+44"],
   "fqdn_tlds": ["com", "net", "org", "local", "internal", "corp"],
   "cef_fields": ["src", "dst", "suser", "duser", "cs1", "cs2", "cs3", "cs4", "shost", "dhost"],
-  "session_timeout_minutes": 15
+  "session_timeout_minutes": 15,
+  "mask_types": [],
+  "skip_types": [],
+  "allowlist": [],
+  "hash_require_context": true,
+  "json_preserve_formatting": true,
+  "multiline_join": true,
+  "parse_structured": true
 }
