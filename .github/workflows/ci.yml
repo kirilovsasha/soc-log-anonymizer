@@ -78,7 +78,8 @@ jobs:
         run: |
           python -m soc_log_anonymizer deanonymize \
             -i clean.log -o restored.log --mapping mapping.json
-          diff examples/sample.log restored.log
+          # Windows checkout may use CRLF while restored.log is LF — compare normalized text.
+          python -c "from pathlib import Path; a=Path('examples/sample.log').read_text(encoding='utf-8').replace('\r\n','\n'); b=Path('restored.log').read_text(encoding='utf-8').replace('\r\n','\n'); raise SystemExit(0 if a==b else 'roundtrip mismatch')"
 
       - name: CLI smoke test (batch)
         shell: bash
