@@ -1,0 +1,168 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Byte-compile all modules
+        run: python -m py_compile soc_log_anonymizer/*.py tests/*.py
+
+      # Тесты сознательно не требуют tkinter: GUI-специфичная логика
+      # вынесена в gui_logic.py (без импорта tkinter), а cli.py импортирует
+      # gui.py лениво (внутри функции, не на уровне модуля) — поэтому
+      # полный набор тестов проходит и на раннерах без установленного Tk.
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Run doctest examples
+        run: |
+          python -c "
+          import doctest, sys
+          import soc_log_anonymizer.anonymizer as m
+          results = doctest.testmod(m, verbose=False)
+          print(results)
+          sys.exit(1 if results.failed else 0)
+          "
+
+      - name: Validate example configs
+        run: |
+          python -m soc_log_anonymizer validate-config examples/sample_config.json
+          python -m soc_log_anonymizer validate-config examples/sample_config.ini
+
+      - name: --version smoke test
+        run: python -m soc_log_anonymizer --version
+
+      - name: CLI smoke test (anonymize + stats + fail-on-unsafe)
+        shell: bash
+        run: |
+          echo "smoke-test-salt-0123456789abcdef" > salt.txt
+          python -m soc_log_anonymizer anonymize \
+            -i examples/sample.log -o clean.log \
+            --org bank --salt-file salt.txt \
+            --save-mapping mapping.json --stats --diff --fail-on-unsafe -v
+
+      - name: CLI smoke test (deanonymize roundtrip)
+        shell: bash
+        run: |
+          python -m soc_log_anonymizer deanonymize \
+            -i clean.log -o restored.log --mapping mapping.json
+          diff examples/sample.log restored.log
+
+      - name: CLI smoke test (batch)
+        shell: bash
+        run: |
+          mkdir -p logs_in && cp examples/sample.log logs_in/a.log
+          python -m soc_log_anonymizer batch \
+            --input-dir logs_in --output-dir logs_out \
+            --salt-file salt.txt --stats
+
+  gzip-and-stream:
+    name: gzip / mmap / stream smoke test (ubuntu, Python 3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build gzip fixture and run all stream modes
+        run: |
+          echo "gzip-smoke-salt-0123456789abcdef" > salt.txt
+          gzip -k examples/sample.log -c > sample.log.gz
+          python -m soc_log_anonymizer anonymize -i sample.log.gz --salt-file salt.txt -o out1.log --stats
+          python -m soc_log_anonymizer anonymize -i sample.log.gz --salt-file salt.txt --stream -o out2.log
+          python -m soc_log_anonymizer anonymize -i examples/sample.log --salt-file salt.txt --stream --mmap -o out3.log
+
+  zipapp:
+    name: zipapp packaging smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build zipapp
+        run: |
+          mkdir -p build
+          cp -r soc_log_anonymizer build/
+          python -m zipapp build -m "soc_log_anonymizer.__main__:main" -o anonymizer.pyz
+      - name: Smoke test zipapp
+        run: |
+          python anonymizer.pyz --version
+          python anonymizer.pyz validate-config examples/sample_config.json
+          echo "zipapp-smoke-salt-0123456789ab" > salt.txt
+          python anonymizer.pyz anonymize -i examples/sample.log --salt-file salt.txt --stats
+
+  pyinstaller-build:
+    name: PyInstaller build smoke test (GUI, ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tkinter + PyInstaller
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk
+          pip install pyinstaller
+      - name: Build standalone GUI binary
+        run: pyinstaller packaging/soc_log_anonymizer_gui.spec
+      # Headless-раннер не может запустить сам GUI (нет дисплея, mainloop()
+      # заблокировал бы job навсегда) — но факт УСПЕШНОЙ СБОРКИ уже ловит
+      # типичные регрессии (опечатка в пути spec-файла, отсутствующий
+      # hiddenimport, сломанная точка входа) без необходимости в реальном
+      # экране. Дополнительно проверяем, что бинарник в принципе
+      # запускается и завершается (быстрый --help через xvfb с последующим
+      # принудительным закрытием было бы избыточно для CI — здесь
+      # достаточно факта существования и исполняемости файла).
+      - name: Verify binary exists and is executable
+        run: |
+          test -f dist/soc-log-anonymizer-gui
+          test -x dist/soc-log-anonymizer-gui
+          ls -la dist/
+
+  pip-install:
+    name: pip install -e . smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package
+        run: pip install -e .
+      - name: Run installed console script
+        run: |
+          soc-log-anonymizer --version
+          soc-log-anonymizer validate-config examples/sample_config.json
+
+  macos:
+    name: Tests (macos-latest, Python 3.12)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s tests -v
