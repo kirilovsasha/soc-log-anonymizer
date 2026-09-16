@@ -95,6 +95,21 @@ EXIT_ERROR = 1
 EXIT_UNSAFE = 2
 
 
+def _configure_stdio() -> None:
+    """Force UTF-8 on stdout/stderr so Cyrillic CLI messages work on Windows.
+
+    GitHub windows-latest (and many Western locales) use cp1252; printing
+    Russian text then raises UnicodeEncodeError and aborts the command.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if stream is None or not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError, AttributeError):
+            pass
+
+
 class _Progress:
     """Emit stable progress records without contaminating command output."""
 
@@ -1101,6 +1116,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
+    _configure_stdio()
     _install_signal_handlers()
     parser = build_parser()
     args = parser.parse_args(argv)
