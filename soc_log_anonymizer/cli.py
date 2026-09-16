@@ -54,7 +54,9 @@ difflib, glob, concurrent.futures).
 import argparse
 import atexit
 import cProfile
+import csv
 import difflib
+import fnmatch
 import glob
 import io as _io
 import json
@@ -63,24 +65,29 @@ import os
 import pstats
 import signal
 import sys
-import tracemalloc
-import csv
 import time
-import fnmatch
+import tracemalloc
 from logging.handlers import RotatingFileHandler
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from . import __version__
 from .anonymizer import SOCLogAnonymizer
 from .audit import log_audit_event
 from .config import AnonymizerConfig, find_default_config_path
 from .io_utils import (
+    atomic_write_text,
     check_world_readable,
     format_size_mb,
     is_gzip_file,
     iter_lines_stream,
     read_file_auto_encoding,
-    atomic_write_text,
+    restrict_sensitive_file,
+)
+from .parallel_merge import (
+    apply_pseudo_rewrite,
+    build_pseudo_rewrite,
+    install_merged_mapping,
+    merge_mappings_deterministic,
 )
 
 logger = logging.getLogger("soc_log_anonymizer")
@@ -93,6 +100,39 @@ ENV_REPORT_FORMAT = "SOC_ANON_REPORT_FORMAT"
 EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_UNSAFE = 2
+
+
+def _mapping_crypto_kwargs(args: argparse.Namespace) -> dict:
+    passphrase = getattr(args, "mapping_passphrase", None)
+    if getattr(args, "mapping_passphrase_env", None):
+        passphrase = os.environ.get(args.mapping_passphrase_env) or passphrase
+    return {
+        "passphrase": passphrase,
+        "use_dpapi": bool(getattr(args, "mapping_dpapi", False)),
+    }
+
+
+def _add_mapping_crypto_args(parser: argparse.ArgumentParser, *, for_load: bool = False) -> None:
+    parser.add_argument(
+        "--mapping-passphrase",
+        help="Passphrase for encrypting/decrypting the mapping file",
+    )
+    parser.add_argument(
+        "--mapping-passphrase-env",
+        help="Read mapping passphrase from this environment variable",
+    )
+    if not for_load:
+        parser.add_argument(
+            "--mapping-dpapi",
+            action="store_true",
+            help="Encrypt mapping with Windows DPAPI (Windows only)",
+        )
+
+
+def _save_mapping_from_args(anonymizer: SOCLogAnonymizer, args: argparse.Namespace) -> None:
+    if not getattr(args, "save_mapping", None):
+        return
+    anonymizer.save_mapping(args.save_mapping, **_mapping_crypto_kwargs(args))
 
 
 def _configure_stdio() -> None:
@@ -319,7 +359,10 @@ def _save_salt_if_requested(args: argparse.Namespace, anonymizer: SOCLogAnonymiz
         fd = os.open(args.save_salt, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(anonymizer.salt)
-        logger.info("Соль сохранена в %s (права доступа 0600)", args.save_salt)
+        warning = restrict_sensitive_file(args.save_salt)
+        if warning:
+            logger.warning("%s", warning)
+        logger.info("Соль сохранена в %s (права ограничены владельцем)", args.save_salt)
 
 
 def _log_stats(anonymizer: SOCLogAnonymizer) -> None:
@@ -476,7 +519,7 @@ def cmd_anonymize(args: argparse.Namespace) -> int:
             out_stream.close()
 
     if args.save_mapping:
-        anonymizer.save_mapping(args.save_mapping)
+        _save_mapping_from_args(anonymizer, args)
 
     if cleaned_text is not None:
         if args.diff:
@@ -555,7 +598,7 @@ def _run_multi_file(args: argparse.Namespace, anonymizer: SOCLogAnonymizer) -> i
         exit_code = max(exit_code, file_exit)
 
     if args.save_mapping:
-        anonymizer.save_mapping(args.save_mapping)
+        _save_mapping_from_args(anonymizer, args)
     if args.stats:
         _log_stats(anonymizer)
 
@@ -665,7 +708,11 @@ def cmd_deanonymize(args: argparse.Namespace) -> int:
             return EXIT_ERROR
         logger.warning("%s", warning)
     try:
-        anonymizer = SOCLogAnonymizer.load_mapping(args.mapping, config=config)
+        anonymizer = SOCLogAnonymizer.load_mapping(
+            args.mapping,
+            config=config,
+            passphrase=_mapping_crypto_kwargs(args).get("passphrase"),
+        )
     except (OSError, ValueError) as e:
         logger.error("Не удалось загрузить mapping-файл %s: %s", args.mapping, e)
         return EXIT_ERROR
@@ -767,7 +814,7 @@ def cmd_batch(args: argparse.Namespace) -> int:
         progress.finish()
 
     if args.save_mapping:
-        anonymizer.save_mapping(args.save_mapping)
+        _save_mapping_from_args(anonymizer, args)
     if args.stats:
         _log_stats(anonymizer)
 
@@ -828,29 +875,39 @@ def _batch_parallel(anonymizer: SOCLogAnonymizer, file_list, args: argparse.Name
                     progress: Optional[_Progress] = None) -> None:
     """Параллельная обработка на уровне файлов: каждый воркер обрабатывает
     один файл целиком той же солью/конфигурацией, после чего таблицы
-    соответствия объединяются в главном процессе. Хэш — чистая функция от
-    (HMAC-ключ, значение), поэтому консистентность псевдонимов между
-    файлами, обработанными в разных процессах, сохраняется."""
+    соответствия объединяются в главном процессе детерминированно."""
     from concurrent.futures import ProcessPoolExecutor
 
-    # anonymizer._hmac_key передаётся уже выведенным (PBKDF2 прогнан один
-    # раз здесь) — без этого каждый из args.workers процессов (а при
-    # батче из сотен файлов это сотни ЗАДАЧ, распределяемых по пулу из
-    # нескольких воркеров, но каждая задача — новый SOCLogAnonymizer)
-    # заново прогонял бы 600 000 итераций ради того же самого ключа.
     tasks = [(full_path, rel_path, anonymizer.salt, anonymizer._hmac_key,
               anonymizer.config.as_dict(), args.output_dir)
              for full_path, rel_path in file_list]
 
+    worker_mappings = []
+    outputs = []
     with ProcessPoolExecutor(max_workers=args.workers) as executor:
-        for rel_path, mapping, stats in executor.map(_batch_worker, tasks):
-            anonymizer.mapping_table.update(mapping)
-            for orig, pseudo in mapping.items():
-                anonymizer.reverse_mapping[pseudo] = orig
+        for rel_path, mapping, stats, out_path in executor.map(_batch_worker, tasks):
+            worker_mappings.append(mapping)
+            outputs.append((rel_path, out_path))
             anonymizer.stats.update(stats)
             logger.info("  OK %s", rel_path)
             if progress:
                 progress.update(rel_path)
+
+    if anonymizer.mapping_table:
+        worker_mappings = [dict(anonymizer.mapping_table)] + worker_mappings
+    canonical, reverse = merge_mappings_deterministic(worker_mappings)
+    rewrite = build_pseudo_rewrite(worker_mappings, canonical)
+    install_merged_mapping(
+        anonymizer.mapping_table, anonymizer.reverse_mapping, canonical, reverse,
+    )
+    if rewrite:
+        for _rel_path, out_path in outputs:
+            try:
+                with open(out_path, "r", encoding="utf-8") as handle:
+                    text = handle.read()
+                atomic_write_text(out_path, apply_pseudo_rewrite(text, rewrite))
+            except OSError as exc:
+                logger.warning("Не удалось переписать %s после merge mapping: %s", out_path, exc)
 
 
 def _batch_worker(task):
@@ -865,7 +922,7 @@ def _batch_worker(task):
     out_path = _output_path_for(full_path, rel_path, output_dir)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     atomic_write_text(out_path, cleaned_text)
-    return rel_path, local.mapping_table, dict(local.stats)
+    return rel_path, local.mapping_table, dict(local.stats), out_path
 
 
 # ----------------------------------------------------------------------
@@ -984,6 +1041,7 @@ def build_parser() -> argparse.ArgumentParser:
     salt_group.add_argument("--salt-file", help=f"Файл с солью (или переменная {ENV_SALT_FILE})")
     p_anon.add_argument("--save-salt", help="Сохранить сгенерированную соль в файл (права 0600)")
     p_anon.add_argument("--save-mapping", help="Сохранить таблицу соответствия в JSON (права 0600)")
+    _add_mapping_crypto_args(p_anon)
     p_anon.add_argument("--stats", action="store_true", help="Вывести статистику замен")
     p_anon.add_argument("--diff", action="store_true", help="Вывести unified diff в stderr")
     p_anon.add_argument("--stream", action="store_true",
@@ -1013,6 +1071,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_dean.add_argument("-i", "--input", help="Входной файл (по умолчанию: stdin)")
     p_dean.add_argument("-o", "--output", help="Выходной файл (по умолчанию: stdout)")
     p_dean.add_argument("--mapping", required=True, help="JSON-файл, сохранённый флагом --save-mapping")
+    _add_mapping_crypto_args(p_dean, for_load=True)
     p_dean.add_argument("--config", help=f"Путь к JSON/INI-файлу конфигурации (или переменная {ENV_CONFIG})")
     p_dean.add_argument("--strict-perms", action="store_true",
                          help=f"Возвращать код {EXIT_ERROR}, если --mapping доступен на чтение другим "
@@ -1032,6 +1091,7 @@ def build_parser() -> argparse.ArgumentParser:
     salt_group_b.add_argument("--salt-file", help=f"Файл с солью (или переменная {ENV_SALT_FILE})")
     p_batch.add_argument("--save-salt", help="Сохранить сгенерированную соль в файл (права 0600)")
     p_batch.add_argument("--save-mapping", help="Сохранить объединённую таблицу соответствия в JSON (права 0600)")
+    _add_mapping_crypto_args(p_batch)
     p_batch.add_argument("--stats", action="store_true", help="Вывести статистику замен")
     p_batch.add_argument("--workers", type=int, default=1, help="Число параллельных процессов (по файлам)")
     p_batch.add_argument("--profile", action="store_true",

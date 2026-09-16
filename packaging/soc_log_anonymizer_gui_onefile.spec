@@ -1,14 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller --onedir GUI build (recommended for Windows distribution).
+PyInstaller --onefile GUI build — основной автономный Windows .exe.
 
-Usage (repo root):
+Один файл: dist/soc-log-anonymizer-gui.exe (Python у получателя не нужен).
 
     pip install pyinstaller
-    pyinstaller packaging/soc_log_anonymizer_gui.spec
+    pyinstaller packaging/soc_log_anonymizer_gui_onefile.spec
 
-Result: dist/soc-log-anonymizer-gui/soc-log-anonymizer-gui.exe
-plus default config copied beside the app by packaging/build_windows.bat.
+Или: packaging\\build_windows.bat
 """
 
 from pathlib import Path
@@ -54,13 +53,17 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     [],
-    exclude_binaries=True,
     name="soc-log-anonymizer-gui",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
+    upx_exclude=[],
+    runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -69,15 +72,4 @@ exe = EXE(
     entitlements_file=None,
     icon=str(ICON) if ICON.is_file() else None,
     version=str(VERSION) if VERSION.is_file() else None,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    name="soc-log-anonymizer-gui",
 )

@@ -24,6 +24,7 @@ TAG_FAMILY: dict[str, str] = {
     "USER_FIELD": "USER",
     "AUTH_USER": "USER",
     "AUTH_USER_CISCO": "USER",
+    "AUTH_USER_SU_FROM": "USER",
     "USER_PATH": "USER",
     "FQDN": "FQDN",
     "ORG": "ORG",
@@ -48,7 +49,7 @@ TAG_FAMILY: dict[str, str] = {
 # Extractor tags always applied (values still filtered in _hash_val).
 STRUCTURAL_TAGS = frozenset({
     "CEF_KV", "SECRET", "USER_FIELD", "AUTH_USER", "AUTH_USER_CISCO",
-    "USER_PATH", "BASE64_CMD",
+    "AUTH_USER_SU_FROM", "USER_PATH", "BASE64_CMD",
 })
 
 DEFAULT_FQDN_STOPWORDS = frozenset({

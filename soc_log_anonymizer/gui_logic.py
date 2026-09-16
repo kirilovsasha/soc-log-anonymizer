@@ -3,7 +3,7 @@ GUI logic kept free from tkinter imports so it can be unit-tested in headless CI
 """
 
 import re
-from typing import Any, Dict, Iterable, List, Optional, Pattern, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 MIN_SALT_LEN = 16
 
@@ -42,8 +42,20 @@ def status_style_name(kind: str) -> str:
 
 def format_size_warning(size_mb: float, limit_mb: int) -> str:
     """Text used for warning the user when a file is too big for full in-memory processing."""
-    return (f"Selected file size is {size_mb:.1f} MB, exceeding the recommended limit of {limit_mb} MB for full in-memory processing. "
-            f"This can noticeably slow the interface or exhaust memory for very large logs.")
+    return (
+        f"Размер выбранных данных ≈ {size_mb:.1f} МБ (лимит полной загрузки в память: "
+        f"{limit_mb} МБ). Это может заметно замедлить интерфейс или исчерпать память."
+    )
+
+
+def format_large_file_choices(size_mb: float, limit_mb: int) -> str:
+    """Dialog body offering sidecar/preview vs full load for large inputs."""
+    return (
+        format_size_warning(size_mb, limit_mb)
+        + "\n\nРекомендуется: загрузить только превью и писать полный результат "
+        "в соседний файл (*.anon.log). Для пайплайнов удобнее CLI-exe.\n\n"
+        "Да — превью + sidecar\nНет — отмена\n"
+    )
 
 
 def find_context_snippet(text: str, value: str, radius: int = 40) -> str:

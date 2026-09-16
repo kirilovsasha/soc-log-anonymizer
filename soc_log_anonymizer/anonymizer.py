@@ -100,7 +100,15 @@ from .detectors import (
     is_plausible_phone,
     is_plausible_windows_user,
 )
-from .io_utils import check_world_readable
+from .io_utils import check_world_readable, restrict_sensitive_file
+from .json_stream import iter_json_or_text_chunks
+from .mapping_crypto import unwrap_payload, wrap_payload
+from .parallel_merge import (
+    apply_pseudo_rewrite,
+    build_pseudo_rewrite,
+    install_merged_mapping,
+    merge_mappings_deterministic,
+)
 from .result import AnonymizeResult
 from .structured import join_continued_lines, mask_structured_line
 
@@ -132,11 +140,23 @@ class SOCLogAnonymizer:
     """Анонимизатор логов для SOC-аналитиков (только стандартная библиотека)."""
 
     __slots__ = (
-        "config", "salt", "_hmac_key", "_hash_cache", "mapping_table",
-        "reverse_mapping", "stats", "well_known_sids", "nil_guid",
-        "custom_pattern_metadata", "patterns", "patterns_dict", "_classify_cache",
-        "_orphaned_thread_count", "_orphaned_thread_lock", "_cef_user_fields_lower",
         "__weakref__",
+        "_cef_user_fields_lower",
+        "_classify_cache",
+        "_hash_cache",
+        "_hmac_key",
+        "_orphaned_thread_count",
+        "_orphaned_thread_lock",
+        "config",
+        "custom_pattern_metadata",
+        "mapping_table",
+        "nil_guid",
+        "patterns",
+        "patterns_dict",
+        "reverse_mapping",
+        "salt",
+        "stats",
+        "well_known_sids",
     )
 
     # Порядок приоритета классификации "сырого" значения (из CEF/SECRET/
@@ -356,10 +376,25 @@ class SOCLogAnonymizer:
                 r'|\bfor\s+user\s+["\']'
                 r"|'su\s+(?:-\s+)?"
                 r"|\bUser\s+'"
+                # Fortinet / generic quoted login
+                r'|\buser\s+["\']'
+                r'|\blogin\s+["\']'
                 r')([A-Za-z0-9_.-]+)'
             )),
 
-            ("AUTH_USER_CISCO", re.compile(r'(?i)(\bby\s+)([A-Za-z0-9_.-]+)(?=\s+on\s+vty)')),
+            # su initiator after quoted target: "'su root' failed for lonvick on ..."
+            # Requires trailing " on" so generic "for X on" prose is not over-matched.
+            ("AUTH_USER_SU_FROM", re.compile(
+                r"(?i)('su\s+[^']*'\s+(?:failed\s+)?for\s+)([A-Za-z0-9_.-]+)(?=\s+on\b)"
+            )),
+
+            ("AUTH_USER_CISCO", re.compile(
+                r'(?i)(?:'
+                r'(\bby\s+)([A-Za-z0-9_.-]+)(?=\s+on\s+vty)'
+                r'|(?:\bfrom\s+user\s+)([A-Za-z0-9_.-]+)'
+                r'|(?:\bUser\s+)([A-Za-z0-9_.-]+)(?=\s+(?:failed|logged|connected|authenticated)\b)'
+                r')'
+            )),
 
             ("USER_PATH", re.compile(
                 r'(?i)(?:[A-Za-z]:\\Users\\|/home/|/Users/)([A-Za-z0-9._-]+)'
@@ -412,6 +447,7 @@ class SOCLogAnonymizer:
             self.custom_pattern_metadata[tag] = {
                 "name": name,
                 "type": tag,
+                "pseudo_type": pseudo_type,
                 "strategy": str(spec.get("strategy", "full")).lower(),
                 "priority": int(spec.get("priority", 0)),
             }
@@ -569,6 +605,19 @@ class SOCLogAnonymizer:
         def _inner(m: "re.Match") -> str:
             return f"{m.group(1)}{self._hash_val(m.group(2), tag)}"
         return _inner
+
+    def _sub_auth_user(self, m: "re.Match") -> str:
+        """AUTH_USER / AUTH_USER_CISCO / AUTH_USER_SU_FROM with optional
+        alternate capture groups (Palo Alto branches leave early groups
+        empty and put the username in a later group)."""
+        user = next((g for g in reversed(m.groups()) if g is not None), None)
+        if user is None:
+            return m.group(0)
+        full = m.group(0)
+        idx = full.rfind(user)
+        if idx < 0:
+            return self._hash_val(user, "USER")
+        return f"{full[:idx]}{self._hash_val(user, 'USER')}{full[idx + len(user):]}"
 
     def _sub_org(self, m: "re.Match") -> str:
         """Подстановочный обработчик для ORG. При выключенном
@@ -755,8 +804,8 @@ class SOCLogAnonymizer:
                 text = pattern.sub(self._sub_key_value_generic("SECRET"), text)
             elif prefix == "USER_FIELD":
                 text = pattern.sub(self._sub_key_value_generic("USER"), text)
-            elif prefix in ("AUTH_USER", "AUTH_USER_CISCO"):
-                text = pattern.sub(self._sub_force_tag("USER"), text)
+            elif prefix in ("AUTH_USER", "AUTH_USER_CISCO", "AUTH_USER_SU_FROM"):
+                text = pattern.sub(self._sub_auth_user, text)
             elif prefix == "ORG":
                 text = pattern.sub(self._sub_org, text)
             elif prefix == "IP":
@@ -825,7 +874,7 @@ class SOCLogAnonymizer:
         def _worker():
             try:
                 result_holder["result"] = self._anonymize_text_impl(text)
-            except Exception as exc:  # noqa: BLE001 — пробрасываем через holder
+            except Exception as exc:
                 result_holder["error"] = exc
             finally:
                 done_event.set()
@@ -989,12 +1038,24 @@ class SOCLogAnonymizer:
         return self.anonymize_text(stripped) + trailing
 
     def anonymize_stream(self, lines: Iterable[str]) -> Iterator[str]:
-        """Построчный генератор — обрабатывает лог с постоянным объёмом
-        памяти независимо от размера файла. Не подходит для случая, когда
-        весь файл — это один JSON-документ, растянутый на много строк
-        (см. README, раздел "Известные ограничения")."""
-        for line in lines:
-            yield self.anonymize_line(line)
+        """Построчный генератор с поддержкой pretty-printed JSON.
+
+        Одиночные NDJSON-строки и обычный текст обрабатываются как раньше.
+        JSON-документы, растянутые на несколько строк, накапливаются до
+        завершённого значения (``json.JSONDecoder.raw_decode``) и
+        маскируются целиком через ``anonymize_json`` — без загрузки всего
+        файла в память, пока документы идут потоком один за другим.
+        """
+        for kind, chunk in iter_json_or_text_chunks(iter(lines)):
+            if kind == "json":
+                parsed = self._try_parse_json(chunk.strip())
+                if parsed is not None:
+                    yield self._dumps_json(self.anonymize_json(parsed), chunk)
+                else:
+                    for line in chunk.splitlines(keepends=True) or [chunk]:
+                        yield self.anonymize_line(line)
+            else:
+                yield self.anonymize_line(chunk)
 
     def deanonymize(self, text: str) -> str:
         """Обратная де-анонимизация ответа LLM по таблице обратных соответствий."""
@@ -1114,7 +1175,7 @@ class SOCLogAnonymizer:
         issues = []
         for tag, pattern in self.patterns:
             if tag in ("CEF_KV", "SECRET", "USER_FIELD", "USER_PATH", "BASE64_CMD",
-                       "AUTH_USER", "AUTH_USER_CISCO") or tag.startswith("CUSTOM:"):
+                       "AUTH_USER", "AUTH_USER_CISCO", "AUTH_USER_SU_FROM") or tag.startswith("CUSTOM:"):
                 continue
 
             def _leftovers():
@@ -1175,13 +1236,24 @@ class SOCLogAnonymizer:
     # Сохранение / загрузка таблицы соответствия
     # ------------------------------------------------------------------
 
-    def save_mapping(self, path: str) -> None:
+    def save_mapping(
+        self,
+        path: str,
+        *,
+        passphrase: Optional[str] = None,
+        use_dpapi: bool = False,
+        kdf_iterations: Optional[int] = None,
+    ) -> None:
         """Сохраняет соль и таблицу соответствия в JSON с правами доступа
         0600 (только владелец, на POSIX-системах). Этот файл — по сути,
         ключ деанонимизации: обращайтесь с ним так же, как с исходным
         логом. Нужен, чтобы деанонимизировать ответ LLM в НОВОМ процессе
         (например, при использовании CLI, где каждый запуск — отдельный
-        процесс и таблица в памяти не сохраняется)."""
+        процесс и таблица в памяти не сохраняется).
+
+        Опционально: ``passphrase`` (кроссплатформенно) или ``use_dpapi``
+        (только Windows) шифруют payload — см. ``mapping_crypto``.
+        """
         payload = {
             "schema_version": MAPPING_SCHEMA_VERSION,
             "algorithm": "HMAC-SHA256/PBKDF2",
@@ -1189,23 +1261,46 @@ class SOCLogAnonymizer:
             "salt": self.salt,
             "mapping": self.mapping_table,
         }
+        iterations = kdf_iterations
+        if iterations is None and passphrase:
+            env_iter = os.environ.get("SOC_ANON_MAPPING_KDF_ITERATIONS")
+            if env_iter:
+                iterations = int(env_iter)
+        to_write = wrap_payload(
+            payload,
+            passphrase=passphrase,
+            use_dpapi=use_dpapi,
+            iterations=iterations or 600_000,
+        )
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
+            json.dump(to_write, f, ensure_ascii=False, indent=2)
             f.write("\n")
+        warning = restrict_sensitive_file(path)
+        if warning:
+            logger.warning("%s", warning)
         logger.info("Таблица соответствия сохранена: %s (%d значений)", path, len(self.mapping_table))
 
     @classmethod
-    def load_mapping(cls, path: str, config: Optional[AnonymizerConfig] = None) -> "SOCLogAnonymizer":
+    def load_mapping(
+        cls,
+        path: str,
+        config: Optional[AnonymizerConfig] = None,
+        *,
+        passphrase: Optional[str] = None,
+    ) -> "SOCLogAnonymizer":
         """Восстанавливает анонимизатор (соль + таблица соответствия) из
         файла, сохранённого save_mapping(), — для деанонимизации в новом
-        процессе/сессии."""
+        процессе/сессии. Для passphrase-шифрованных файлов передайте
+        ``passphrase``; DPAPI-файлы расшифровываются автоматически на
+        той же Windows-учётной записи."""
         warning = check_world_readable(path)
         if warning:
             logger.warning("%s", warning)
 
         with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            raw = json.load(f)
+        data = unwrap_payload(raw, passphrase=passphrase)
 
         version = data.get("schema_version", 0)
         if version > MAPPING_SCHEMA_VERSION:
@@ -1230,33 +1325,38 @@ class SOCLogAnonymizer:
         через ProcessPoolExecutor (regex — CPU-bound задача).
 
         Консистентность псевдонимов между процессами сохраняется, т.к.
-        хэш — чистая функция от (HMAC-ключ, значение): одни и те же
-        salt/pbkdf2_iterations + значение в любом процессе дают один и
-        тот же псевдоним. Однако разрешение коллизий хэша (суффикс _2,
-        _3...) работает независимо в каждом воркере — при реальной
-        коллизии (крайне маловероятной при 12-символьном HMAC) в разных
-        чанках возможны разные суффиксы. mapping_table и stats этого
-        экземпляра пополняются результатами всех воркеров."""
+        хэш — чистая функция от (HMAC-ключ, значение). Коллизии усечённого
+        хэша (суффиксы ``_2``, ``_3``...) после сбора результатов всех
+        воркеров пересобираются детерминированно в родительском процессе
+        (сортировка originals), а текст чанков переписывается при
+        необходимости — см. ``parallel_merge``.
+        """
         if workers <= 1 or len(lines) <= chunk_size:
             return [self.anonymize_line(l) for l in lines]
 
         chunks = [lines[i:i + chunk_size] for i in range(0, len(lines), chunk_size)]
-        # Передаём уже выведенный HMAC-ключ (self._hmac_key), а не только
-        # соль — PBKDF2 уже был прогнан один раз здесь, в родительском
-        # процессе; без этого КАЖДЫЙ воркер заново прогонял бы 600 000
-        # итераций ради того же самого ключа (см. docstring __init__,
-        # параметр _prederived_key). bytes — picklable, передаётся между
-        # процессами без проблем.
         args = [(self.config.as_dict(), self.salt, self._hmac_key, chunk) for chunk in chunks]
 
-        results: List[str] = []
+        chunk_outputs: List[List[str]] = []
+        worker_mappings: List[Dict[str, str]] = []
         with ProcessPoolExecutor(max_workers=workers) as executor:
             for out_lines, mapping, stats in executor.map(_parallel_worker, args):
-                results.extend(out_lines)
-                self.mapping_table.update(mapping)
-                for orig, pseudo in mapping.items():
-                    self.reverse_mapping[pseudo] = orig
+                chunk_outputs.append(out_lines)
+                worker_mappings.append(mapping)
                 self.stats.update(stats)
+
+        if self.mapping_table:
+            worker_mappings = [dict(self.mapping_table)] + worker_mappings
+        canonical, reverse = merge_mappings_deterministic(worker_mappings)
+        rewrite = build_pseudo_rewrite(worker_mappings, canonical)
+        install_merged_mapping(self.mapping_table, self.reverse_mapping, canonical, reverse)
+
+        results: List[str] = []
+        for out_lines in chunk_outputs:
+            if rewrite:
+                results.extend(apply_pseudo_rewrite(line, rewrite) for line in out_lines)
+            else:
+                results.extend(out_lines)
         return results
 
 

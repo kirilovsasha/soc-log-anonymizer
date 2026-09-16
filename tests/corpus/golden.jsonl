@@ -23,3 +23,11 @@
 {"id": "json-user", "input": "{\"user\":\"alice\",\"ok\":true,\"n\":1}", "must_keep": ["\"ok\": true", "\"n\": 1"], "must_not_contain": ["alice"]}
 {"id": "multiline", "input": "sshd: Failed password for bob from 10.2.2.2\\\n port 22", "must_keep": ["sshd"], "must_not_contain": [" bob ", "10.2.2.2"]}
 {"id": "rfc5424", "input": "<34>1 2026-09-16T10:22:01Z vpn.bank.local sshd - - - session opened", "must_keep": ["sshd", "session opened"], "must_not_contain": ["vpn.bank.local"]}
+{"id": "su-initiator", "input": "su: 'su root' failed for lonvick on /dev/pts/8", "must_keep": ["su:", "/dev/pts/8"], "must_not_contain": [" lonvick ", " root"]}
+{"id": "fortinet-user", "input": "date=2026-09-16 srcip=10.0.0.8 dstip=10.0.0.1 usr=jdoe action=login", "must_keep": ["action=login"], "must_not_contain": ["jdoe", "10.0.0.8"]}
+{"id": "palo-alto", "input": "THREAT from user alice failed authentication from 198.51.100.2", "must_keep": ["THREAT", "authentication"], "must_not_contain": [" alice ", "198.51.100.2"]}
+{"id": "azure-json", "input": "{\"userPrincipalName\":\"alice@contoso.com\",\"callerIpAddress\":\"203.0.113.50\",\"ok\":true}", "must_keep": ["\"ok\": true"], "must_not_contain": ["alice@contoso.com", "203.0.113.50"]}
+{"id": "aws-json", "input": "{\"userIdentity\":{\"principalId\":\"AIDAI123\",\"type\":\"IAMUser\"},\"sourceIPAddress\":\"203.0.113.9\",\"eventName\":\"ConsoleLogin\"}", "must_keep": ["ConsoleLogin", "IAMUser"], "must_not_contain": ["AIDAI123", "203.0.113.9"]}
+{"id": "win-event-json", "input": "{\"EventID\":4624,\"TargetUserName\":\"jdoe\",\"IpAddress\":\"10.0.0.9\",\"WorkstationName\":\"PC01.bank.local\"}", "must_keep": ["\"EventID\": 4624"], "must_not_contain": ["jdoe", "10.0.0.9", "PC01.bank.local"]}
+{"id": "pretty-json-stream", "input": "{\n  \"user\": \"alice\",\n  \"ip\": \"10.0.0.5\"\n}", "must_keep": [], "must_not_contain": ["alice", "10.0.0.5"]}
+{"id": "invalid-password-fp", "input": "Invalid password entered by operator", "must_keep": ["Invalid password"], "must_not_contain": ["[SECRET_"]}

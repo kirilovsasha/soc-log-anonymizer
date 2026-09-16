@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s tests -q
+
+  windows-artifacts:
+    needs: test
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyinstaller
+      - name: Build GUI + CLI
+        shell: cmd
+        run: packaging\build_windows.bat
+      - name: Verify
+        shell: pwsh
+        run: |
+          Test-Path dist/soc-log-anonymizer-gui.exe | Should -Be $true
+          Test-Path dist/soc-log-anonymizer-cli.exe | Should -Be $true
+          & dist/soc-log-anonymizer-cli.exe --version
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exes
+          path: |
+            dist/soc-log-anonymizer-gui.exe
+            dist/soc-log-anonymizer-cli.exe
+            dist/soc_log_anonymizer.json
+
+  github-release:
+    needs: windows-artifacts
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-exes
+          path: dist
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/soc-log-anonymizer-gui.exe
+            dist/soc-log-anonymizer-cli.exe
+            dist/soc_log_anonymizer.json
+          body: |
+            Windows onefile builds (unsigned). Sign with `signtool` before broad SOC rollout — see `docs/PUBLISHING.md`.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

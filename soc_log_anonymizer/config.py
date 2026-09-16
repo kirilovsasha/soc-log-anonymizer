@@ -11,9 +11,10 @@
 import configparser
 import json
 import os
-import sys
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
+
+from .paths import app_dir as _paths_app_dir
 
 
 def normalize_key(key: str) -> str:
@@ -77,24 +78,10 @@ def _app_dir() -> str:
     """Каталог, в котором физически лежит запущенное приложение — рядом
     с которым ищется auto-discovered конфиг (см. find_default_config_path).
 
-    Для PyInstaller `--onefile` сборки `sys.executable` указывает на сам
-    .exe/бинарник (тот, который пользователь скачал и запустил), а НЕ на
-    временный каталог распаковки `sys._MEIPASS`, куда PyInstaller на
-    время выполнения разворачивает bundled-файлы: этот каталог новый при
-    каждом запуске и удаляется по завершении процесса — положить туда
-    конфиг и рассчитывать, что он "останется", бессмысленно. `frozen`
-    выставляется в True самим PyInstaller (и другими фризерами вроде
-    cx_Freeze) именно для этого различения.
-
-    Для обычного запуска (`python -m soc_log_anonymizer`, `pip install
-    -e .`, zipapp) — каталог, где лежит сам пакет; это менее интуитивно
-    как "рядом с приложением" для конечного пользователя, чем для
-    собранного .exe, но даёт предсказуемое поведение без дополнительных
-    предположений о структуре проекта/venv."""
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
-
+    Для PyInstaller `--onefile`/`--onedir` сборки это каталог exe
+    (не `_MEIPASS`). Для обычного запуска — каталог пакета.
+    """
+    return _paths_app_dir()
 
 # Имена файлов, которые auto-discovery ищет рядом с приложением, в
 # порядке приоритета (JSON раньше INI — формат по умолчанию для
@@ -117,12 +104,38 @@ def find_default_config_path() -> Optional[str]:
     используется только как запасной вариант, когда ничего явно не
     указано. Возвращает None, если ничего не найдено — тогда
     используется конфигурация по умолчанию, как и раньше."""
+    _ensure_bundled_default_config()
     app_dir = _app_dir()
     for name in _AUTO_CONFIG_NAMES:
         candidate = os.path.join(app_dir, name)
         if os.path.isfile(candidate):
             return candidate
     return None
+
+
+def _ensure_bundled_default_config() -> None:
+    """If PyInstaller shipped default_config.json and no config sits next
+    to the exe yet, copy it once as soc_log_anonymizer.json."""
+    import shutil
+    import sys
+
+    target = os.path.join(_app_dir(), "soc_log_anonymizer.json")
+    if os.path.isfile(target):
+        return
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(os.path.join(meipass, "default_config.json"))
+    # onedir: datas may land next to exe or in _internal
+    candidates.append(os.path.join(_app_dir(), "default_config.json"))
+    candidates.append(os.path.join(_app_dir(), "_internal", "default_config.json"))
+    for src in candidates:
+        if os.path.isfile(src):
+            try:
+                shutil.copyfile(src, target)
+            except OSError:
+                return
+            return
 
 
 def _default_sensitive_json_keys() -> List[str]:
@@ -133,6 +146,15 @@ def _default_sensitive_json_keys() -> List[str]:
         "srcip", "dstip",
         "password", "passwd", "secret", "token", "api_key", "apikey", "authorization",
         "email", "phone", "domain", "computername", "host", "hostname", "srchost", "dsthost",
+        # Azure AD / Entra ID audit
+        "userprincipalname", "upn", "displayname", "mailnickname",
+        "calleripaddress", "ipaddressorproxy", "initiatedby",
+        # AWS CloudTrail
+        "accesskeyid", "sessionissuer", "principalid", "recipientaccountid",
+        "sourceipaddress", "useridentity", "arn",
+        # Windows Event XML/JSON flattened
+        "targetusername", "subjectusername", "ipaddress", "targetdomainname",
+        "subjectdomainname", "workstationname",
     ]
 
 
@@ -140,14 +162,20 @@ def _default_key_type_hints() -> Dict[str, str]:
     return {
         "ip": "IP", "ipaddress": "IP", "srcip": "IP", "destip": "IP", "dstip": "IP",
         "sourceip": "IP", "destinationip": "IP", "clientip": "IP",
+        "calleripaddress": "IP", "sourceipaddress": "IP", "ipaddressorproxy": "IP",
         "email": "EMAIL",
         "domain": "FQDN", "computername": "FQDN", "host": "FQDN", "hostname": "FQDN",
-        "srchost": "FQDN", "dsthost": "FQDN",
+        "srchost": "FQDN", "dsthost": "FQDN", "workstationname": "FQDN",
         "user": "USER", "username": "USER", "login": "USER", "account": "USER",
         "subjectaccountname": "USER", "targetusername": "USER", "objectaccountname": "USER",
         "subjectaccountdomain": "USER", "objectaccountdomain": "USER",
+        "userprincipalname": "USER", "upn": "USER", "displayname": "USER",
+        "mailnickname": "USER", "subjectusername": "USER",
+        "targetdomainname": "USER", "subjectdomainname": "USER",
+        "principalid": "USER", "sessionissuer": "USER",
         "password": "SECRET", "passwd": "SECRET", "secret": "SECRET",
         "token": "SECRET", "apikey": "SECRET", "authorization": "SECRET",
+        "accesskeyid": "SECRET", "arn": "SECRET",
         "phone": "PHONE",
     }
 
@@ -200,6 +228,8 @@ def _default_user_field_names() -> List[str]:
         "user", "username", "login", "account", "subject.account.name",
         "uname", "subject", "src_user", "dst_user", "srcuser", "dstuser",
         "target_user", "targetuser", "accountname", "object.account.name",
+        # Fortinet / Palo Alto key=value style
+        "usr", "xauth_user", "srcname", "dstname",
     ]
 
 

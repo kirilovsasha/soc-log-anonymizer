@@ -129,9 +129,13 @@ def _get_audit_logger(path: str, max_bytes: int, backup_count: int) -> logging.L
 
 def _chmod_quiet(path: str) -> None:
     try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+        from .winsec import restrict_sensitive_file
+        restrict_sensitive_file(path)
+    except Exception:
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
 
 
 def _safe_user() -> str:

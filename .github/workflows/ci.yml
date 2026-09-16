@@ -40,11 +40,18 @@ jobs:
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
 
-      - name: Lint new modules
+      - name: Lint and typecheck package
         run: |
-          pip install "ruff>=0.8,<1" "mypy>=1.10,<1.15"
-          ruff check soc_log_anonymizer/detectors.py soc_log_anonymizer/result.py soc_log_anonymizer/structured.py soc_log_anonymizer/gui_theme.py
-          mypy --ignore-missing-imports --follow-imports=skip soc_log_anonymizer/detectors.py soc_log_anonymizer/result.py soc_log_anonymizer/structured.py
+          pip install -e ".[dev]"
+          ruff check soc_log_anonymizer
+          mypy --ignore-missing-imports --follow-imports=skip \
+            soc_log_anonymizer/detectors.py \
+            soc_log_anonymizer/result.py \
+            soc_log_anonymizer/structured.py \
+            soc_log_anonymizer/json_stream.py \
+            soc_log_anonymizer/parallel_merge.py \
+            soc_log_anonymizer/mapping_crypto.py \
+            soc_log_anonymizer/gui_theme.py
 
       - name: Run doctest examples
         run: |
@@ -138,21 +145,50 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3-tk
           pip install pyinstaller
-      - name: Build standalone GUI binary
-        run: pyinstaller packaging/soc_log_anonymizer_gui.spec
-      # Headless-раннер не может запустить сам GUI (нет дисплея, mainloop()
-      # заблокировал бы job навсегда) — но факт УСПЕШНОЙ СБОРКИ уже ловит
-      # типичные регрессии (опечатка в пути spec-файла, отсутствующий
-      # hiddenimport, сломанная точка входа) без необходимости в реальном
-      # экране. Дополнительно проверяем, что бинарник в принципе
-      # запускается и завершается (быстрый --help через xvfb с последующим
-      # принудительным закрытием было бы избыточно для CI — здесь
-      # достаточно факта существования и исполняемости файла).
+      - name: Build standalone GUI binary (onefile)
+        run: pyinstaller packaging/soc_log_anonymizer_gui_onefile.spec
       - name: Verify binary exists and is executable
         run: |
           test -f dist/soc-log-anonymizer-gui
           test -x dist/soc-log-anonymizer-gui
           ls -la dist/
+
+  pyinstaller-windows:
+    name: PyInstaller Windows artifacts (GUI + CLI)
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+      - name: Build GUI + CLI (onefile)
+        shell: cmd
+        run: packaging\build_windows.bat
+      - name: Verify executables
+        shell: pwsh
+        run: |
+          Test-Path dist/soc-log-anonymizer-gui.exe | Should -Be $true
+          Test-Path dist/soc-log-anonymizer-cli.exe | Should -Be $true
+          & dist/soc-log-anonymizer-cli.exe --version
+      - name: Upload GUI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: soc-log-anonymizer-gui-windows
+          path: |
+            dist/soc-log-anonymizer-gui.exe
+            dist/soc_log_anonymizer.json
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: soc-log-anonymizer-cli-windows
+          path: |
+            dist/soc-log-anonymizer-cli.exe
+            dist/soc_log_anonymizer.json
 
   pip-install:
     name: pip install -e . smoke test
@@ -178,3 +214,30 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m unittest discover -s tests -v
+
+  benchmark:
+    name: Benchmark smoke (ubuntu, Python 3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run benchmark unit + timed corpus
+        run: |
+          python -m unittest tests.test_quality.TestBenchmarkSmoke -v
+          python - <<'PY'
+          import time, json
+          from soc_log_anonymizer import SOCLogAnonymizer
+          from soc_log_anonymizer.config import AnonymizerConfig
+          a = SOCLogAnonymizer(salt="bench-salt", config=AnonymizerConfig(pbkdf2_iterations=1000))
+          line = "sshd: Accepted password for alice from 10.0.0.5 port 22\n"
+          payload = line * 20000
+          t0 = time.perf_counter()
+          out = a.anonymize_text(payload)
+          elapsed = time.perf_counter() - t0
+          assert "10.0.0.5" not in out
+          print(json.dumps({"lines": 20000, "seconds": round(elapsed, 3)}))
+          if elapsed > 30:
+              raise SystemExit(f"benchmark regression: {elapsed:.2f}s")
+          PY

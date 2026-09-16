@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Callable, Dict, Optional, Pattern
 
 from .gui_logic import value_search_pattern
-from .gui_theme import TAG_COLORS_DARK, _TYPE_LEGEND_RU, pseudonym_type
+from .gui_theme import _TYPE_LEGEND_RU, TAG_COLORS_DARK, pseudonym_type
 
 HTML_DIFF_CONTEXT_LINES = 3
 
@@ -109,7 +109,7 @@ def build_diff_html(
                         f'<div class="line line-new"><span class="marker">+</span> {rendered}</div>'
                     )
 
-    types_present = sorted({pseudonym_type(p) for p in reverse_mapping.keys()})
+    types_present = sorted({pseudonym_type(p) for p in reverse_mapping})
     legend_rows = "".join(
         f'<tr><td><span class="swatch" style="background:{TAG_COLORS_DARK.get(t, TAG_COLORS_DARK["VALUE"])[0]};'
         f'color:{TAG_COLORS_DARK.get(t, TAG_COLORS_DARK["VALUE"])[1]}">{html.escape(t)}</span></td>'

@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 2.4.0
+
+- Expanded golden corpus with Fortinet / Palo Alto / su-initiator / Azure /
+  AWS / Windows Event JSON cases; added FP/FN scoring tests.
+- AUTH patterns: su initiator (`'su root' failed for X on`), Fortinet quoted
+  user/login, Palo Alto `from user` / `User … failed`.
+- Default JSON keys/hints for Azure AD, AWS CloudTrail, Windows Event fields.
+- Deterministic collision-suffix merge after `--workers` / `batch --workers`.
+- `--stream` accumulates pretty-printed multi-line JSON documents.
+- Optional mapping encryption: `--mapping-passphrase` / `--mapping-dpapi`.
+- GUI split into mixin modules (`gui_*_mixin.py`); `gui.py` is a thin shell.
+- `pip install -e ".[dev]"` extras; CI lint/typecheck on full package;
+  benchmark job; GitHub Release + PyPI publish workflows.
+- README shortened; full reference moved to `docs/REFERENCE.md`.
+
+## 2.3.0
+
+- Windows EXE packaging: **onefile** GUI+CLI (primary), optional onedir,
+  PE version/icon, DPI hook, default config bundle, `build_windows.bat`,
+  Windows CI artifacts.
+- GUI: crash log + MessageBox for windowed builds, AppData/portable data
+  paths, draft autosave toggle, open app/data/crash folders, large-file
+  preview+sidecar defaults.
+- Security: Windows ACL (`icacls`) for salt/mapping/drafts; docs
+  `docs/WINDOWS_EXE.md`.
 - Fixed Windows CLI crash (`UnicodeEncodeError`) when printing Cyrillic messages on cp1252 consoles (also CI on `windows-latest`).
 - Fixed GUI highlight falsely marking allowlisted tokens (e.g. `administrator`) when a shorter mapped value like `admin` was a substring.
 - Compacted the GUI header into a single toolbar row; secondary actions live under «Ещё», theme/font/sync under «Вид».

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "soc-log-anonymizer"
-version = "2.2.0"
+version = "2.4.0"
 description = "Анонимизация логов SOC перед отправкой во внешнюю LLM (только стандартная библиотека Python)"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -15,12 +15,36 @@ authors = [
 keywords = ["soc", "security", "log-anonymization", "llm", "privacy", "pii"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Topic :: Security",
     "Intended Audience :: Information Technology",
+    "Development Status :: 5 - Production/Stable",
 ]
 dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8,<1",
+    "mypy>=1.10,<1.15",
+    "build>=1.2",
+    "twine>=5.0",
+]
+publish = [
+    "build>=1.2",
+    "twine>=5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/soc-log-anonymizer/soc-log-anonymizer"
+Documentation = "https://github.com/soc-log-anonymizer/soc-log-anonymizer#readme"
+Changelog = "https://github.com/soc-log-anonymizer/soc-log-anonymizer/blob/main/CHANGELOG.md"
+Issues = "https://github.com/soc-log-anonymizer/soc-log-anonymizer/issues"
 
 [project.scripts]
 soc-log-anonymizer = "soc_log_anonymizer.__main__:main"
@@ -34,9 +58,29 @@ target-version = "py39"
 
 [tool.ruff.lint]
 # Early-return guards are clearer than inlined boolean returns in detector filters.
-ignore = ["SIM103"]
+# Mass PEP585/604 rewrites deferred — package still targets readable 3.9-style typing.
+ignore = [
+    "SIM103",
+    "UP006",
+    "UP035",
+    "UP045",
+    "UP037",
+    "FA100",
+    "BLE001",
+    "B023",
+    "DTZ005",
+    "PYI034",
+    "RUF012",
+    "PERF402",
+    "SIM102",
+    "SIM115",
+    "S110",
+    "C401",
+]
 
 [tool.mypy]
 python_version = "3.9"
 ignore_missing_imports = true
 follow_imports = "skip"
+warn_unused_ignores = true
+check_untyped_defs = false

@@ -7,23 +7,44 @@ import gzip
 import logging
 import mmap
 import os
-import stat
 import tempfile
 from typing import BinaryIO, Iterator, Optional
 
+from .winsec import check_world_readable, restrict_sensitive_file
+
 logger = logging.getLogger("soc_log_anonymizer")
+
+# Re-export for existing importers (anonymizer, cli, tests).
+__all__ = [
+    "atomic_write_text",
+    "check_world_readable",
+    "detect_file_encoding",
+    "format_size_mb",
+    "is_gzip_file",
+    "iter_lines_mmap",
+    "iter_lines_stream",
+    "read_file_auto_encoding",
+    "restrict_sensitive_file",
+]
 
 _ENCODING_CANDIDATES = ['utf-8', 'utf-8-sig', 'windows-1251', 'cp1252', 'latin-1']
 _GZIP_MAGIC = b'\x1f\x8b'
 
 
 def atomic_write_text(file_path: str, text: str, encoding: str = "utf-8",
-                      mode: int = 0o600) -> None:
-    """Write text atomically, avoiding truncated outputs after interruption."""
+                      mode: int = 0o600, *, restrict: bool = False) -> None:
+    """Write text atomically, avoiding truncated outputs after interruption.
+
+    If ``restrict`` is True, applies owner-only permissions (POSIX 0600 /
+    Windows ACL via icacls) after the final replace.
+    """
     directory = os.path.dirname(os.path.abspath(file_path)) or "."
     fd, temp_path = tempfile.mkstemp(prefix=".soc-anon-", dir=directory, text=True)
     try:
-        os.chmod(temp_path, mode)
+        try:
+            os.chmod(temp_path, mode)
+        except OSError:
+            pass
         with os.fdopen(fd, "w", encoding=encoding, newline="") as handle:
             handle.write(text)
             handle.flush()
@@ -35,6 +56,10 @@ def atomic_write_text(file_path: str, text: str, encoding: str = "utf-8",
         except OSError:
             pass
         raise
+    if restrict:
+        warning = restrict_sensitive_file(file_path)
+        if warning:
+            logger.warning("%s", warning)
 
 
 def _normalize_newlines(text: str) -> str:
@@ -208,20 +233,4 @@ def format_size_mb(size_bytes: int) -> float:
     return size_bytes / (1024 * 1024)
 
 
-def check_world_readable(file_path: str) -> Optional[str]:
-    """Проверяет права доступа к чувствительному файлу (соль, mapping) на
-    POSIX-системах и возвращает текст предупреждения, если файл доступен
-    на чтение группе/остальным пользователям. На Windows права доступа
-    устроены иначе (ACL, не биты rwx), проверка пропускается — возвращает
-    None. Не блокирует чтение, только информирует (гигиена, а не гейт)."""
-    if os.name != "posix":
-        return None
-    try:
-        mode = os.stat(file_path).st_mode
-    except OSError:
-        return None
-    if mode & (stat.S_IRGRP | stat.S_IROTH):
-        return (f"Файл {file_path} доступен на чтение другим пользователям системы "
-                f"(рекомендуется chmod 600 {file_path}) — он может содержать соль "
-                f"или таблицу деанонимизации.")
-    return None
+# check_world_readable imported from winsec (POSIX bits + Windows ACL hint).

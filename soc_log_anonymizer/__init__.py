@@ -11,12 +11,12 @@ from .config import AnonymizerConfig
 from .io_utils import read_file_auto_encoding
 from .result import AnonymizeResult
 
-__version__ = "2.2.0"
+__version__ = "2.4.0"
 
 __all__ = [
-    "SOCLogAnonymizer",
-    "AnonymizerConfig",
     "AnonymizeResult",
-    "read_file_auto_encoding",
+    "AnonymizerConfig",
+    "SOCLogAnonymizer",
     "__version__",
+    "read_file_auto_encoding",
 ]

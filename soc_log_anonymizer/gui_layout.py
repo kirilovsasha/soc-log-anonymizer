@@ -25,6 +25,7 @@ from .gui_constants import (
     ICON_UNDO,
     ICON_WARN,
 )
+
 if TYPE_CHECKING:
     from .gui import AnonymizerGUI
 

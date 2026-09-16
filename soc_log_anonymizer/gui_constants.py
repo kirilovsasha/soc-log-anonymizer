@@ -6,6 +6,8 @@ MAX_FONT_SIZE = 18
 DEFAULT_FONT_SIZE = 10
 AUTOSAVE_INTERVAL_MS = 30_000
 GUI_DISPLAY_CHAR_LIMIT = 1_000_000
+# Above this size (MB), GUI prefers sidecar output and truncated preview.
+GUI_SIDECAR_AUTO_MB = 50
 GUI_STATE_FILENAME = "soc_log_anonymizer_gui_state.json"
 
 FONT_UI = "Segoe UI"
@@ -35,3 +37,4 @@ ICON_WARN = "⚠"
 ICON_TAB_LOG = "📄"
 ICON_TAB_MAP = "🗂"
 ICON_TAB_CONFIG = "⚙"
+ICON_FOLDER = "📂"
