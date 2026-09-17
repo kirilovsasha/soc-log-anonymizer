@@ -425,6 +425,12 @@ class GuiChromeMixin:
                 self.txt_config.configure(bg=p["surface"], fg=p["text"], insertbackground=p["text"],
                                            selectbackground=p["highlight_bg"], selectforeground=p["highlight_fg"],
                                            font=(FONT_MONO, self.font_size.get()))
+            if hasattr(self, "txt_allowlist"):
+                self.txt_allowlist.configure(
+                    bg=p["surface"], fg=p["text"], insertbackground=p["text"],
+                    selectbackground=p["highlight_bg"], selectforeground=p["highlight_fg"],
+                    font=(FONT_MONO, self.font_size.get()),
+                )
         if hasattr(self, "files_list"):
             self.files_list.configure(
                 bg=p["surface"], fg=p["text"], selectbackground=p["highlight_bg"],
@@ -474,6 +480,8 @@ class GuiChromeMixin:
         self.txt_output.configure(font=(FONT_MONO, size))
         if hasattr(self, "txt_config"):
             self.txt_config.configure(font=(FONT_MONO, size))
+        if hasattr(self, "txt_allowlist"):
+            self.txt_allowlist.configure(font=(FONT_MONO, size))
 
 
     def _set_status(self, text: str, kind: str = "Idle"):

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- GUI: allowlist on the Config tab is a plain-text field (one exception per line)
+  instead of the listbox + Add/Remove/preset buttons.
+
 ## 2.4.0
 
 - Expanded golden corpus with Fortinet / Palo Alto / su-initiator / Azure /

@@ -8,6 +8,7 @@ from tkinter import ttk
 from typing import TYPE_CHECKING
 
 from .gui_constants import (
+    FONT_MONO,
     FONT_UI,
     ICON_COPY,
     ICON_DICE,
@@ -325,44 +326,40 @@ def _build_config_tab(app: "AnonymizerGUI", tab_config: ttk.Frame) -> None:
         command=app.generate_new_salt,
     ).pack(side=tk.LEFT)
 
-    # Allowlist editor (human-friendly)
+    # Allowlist: plain-text exceptions (one value per line)
     allow_outer, allow_card = app._card(tab_config)
     allow_outer.pack(fill=tk.X, padx=8, pady=(0, 6))
     allow_header = ttk.Frame(allow_card, style="Card.TFrame")
     allow_header.pack(fill=tk.X, padx=12, pady=(10, 4))
-    ttk.Label(allow_header, text="Allowlist — не маскировать", style="Section.TLabel").pack(
+    ttk.Label(allow_header, text="Исключения (allowlist)", style="Section.TLabel").pack(
         side=tk.LEFT
     )
     ttk.Label(
         allow_header,
-        text="Точные значения (IP, логины…). Сохраняются в конфиг.",
+        text="Не маскировать: по одному значению на строку (IP, логины…). Сохраняются в конфиг.",
         style="Muted.TLabel",
     ).pack(side=tk.LEFT, padx=12)
 
     allow_body = ttk.Frame(allow_card, style="Card.TFrame")
     allow_body.pack(fill=tk.X, padx=12, pady=(0, 10))
-
-    app.allowlist_list = tk.Listbox(
-        allow_body, height=5, exportselection=False, relief=tk.FLAT, borderwidth=0
+    allow_scroll = ttk.Scrollbar(allow_body, orient=tk.VERTICAL)
+    allow_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+    app.txt_allowlist = tk.Text(
+        allow_body,
+        height=6,
+        wrap=tk.NONE,
+        font=(FONT_MONO, 9),
+        undo=True,
+        relief=tk.FLAT,
+        borderwidth=0,
+        highlightthickness=0,
+        padx=8,
+        pady=6,
+        yscrollcommand=allow_scroll.set,
     )
-    app.allowlist_list.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
-    allow_scroll = ttk.Scrollbar(allow_body, orient=tk.VERTICAL, command=app.allowlist_list.yview)
-    app.allowlist_list.configure(yscrollcommand=allow_scroll.set)
-    allow_scroll.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
-
-    allow_side = ttk.Frame(allow_body, style="Card.TFrame")
-    allow_side.pack(side=tk.LEFT, fill=tk.Y)
-    app.allowlist_entry = ttk.Entry(allow_side, width=22, font=(FONT_UI, 9))
-    app.allowlist_entry.pack(fill=tk.X, pady=(0, 4))
-    app.allowlist_entry.bind("<Return>", lambda e: app.add_allowlist_value())
-    ttk.Button(allow_side, text="Добавить", style="Ghost.TButton",
-               command=app.add_allowlist_value).pack(fill=tk.X, pady=2)
-    ttk.Button(allow_side, text="Удалить", style="Ghost.TButton",
-               command=app.remove_allowlist_value).pack(fill=tk.X, pady=2)
-    ttk.Button(allow_side, text="+ DNS", style="Ghost.TButton",
-               command=lambda: app.add_allowlist_preset("dns_public")).pack(fill=tk.X, pady=2)
-    ttk.Button(allow_side, text="+ Windows", style="Ghost.TButton",
-               command=lambda: app.add_allowlist_preset("windows_builtin")).pack(fill=tk.X, pady=2)
+    app.txt_allowlist.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    allow_scroll.config(command=app.txt_allowlist.yview)
+    app.txt_allowlist.bind("<FocusOut>", lambda e: app._patch_config_editor_allowlist())
 
     # Advanced JSON
     ttk.Label(
