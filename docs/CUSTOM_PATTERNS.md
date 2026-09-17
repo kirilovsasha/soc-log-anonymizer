@@ -17,7 +17,15 @@
 }
 ```
 
-- `strategy`: `full` (псевдоним), `partial` (края видны), `format` (A/9).
-- `priority`: больше — раньше.
-- Проверка: `python -m soc_log_anonymizer validate-config my.json`.
-- Не кладите сюда вендорский «профиль на все случаи»: один паттерн — одна сущность.
+| Поле | Смысл |
+|---|---|
+| `strategy` | `full` — целиком псевдоним; `partial` — края видны; `format` — форма A/9 |
+| `priority` | Чем больше, тем раньше срабатывает |
+| `enabled` | `false` — временно выключить без удаления |
+| `test_string` | Строка для `validate-config` (проверка, что паттерн матчится) |
+
+Проверка: `python -m soc_log_anonymizer validate-config my.json`.
+
+Не кладите сюда вендорский «профиль на все случаи»: один паттерн — одна
+сущность. Для УНП/PAN/IBAN/личного номера РБ встроенные типы уже есть —
+см. [REFERENCE.md](REFERENCE.md#masked-data).

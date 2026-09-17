@@ -1,24 +1,25 @@
-# Publishing: GitHub Releases, code signing, PyPI
+# Публикация: GitHub Releases, подпись кода, PyPI
 
 ## GitHub Releases
 
-On a version tag (`v2.4.0`) the workflow `.github/workflows/release.yml`:
+По тегу версии (например `v2.5.0`) workflow `.github/workflows/release.yml`:
 
-1. Runs the test suite
-2. Builds Windows GUI/CLI onefile artifacts
-3. Uploads them to a GitHub Release
+1. Запускает набор тестов
+2. Собирает Windows GUI/CLI onefile-артефакты
+3. Загружает их в GitHub Release
 
-Create a release:
+Создание релиза:
 
 ```bash
-git tag v2.4.0
-git push origin v2.4.0
+git tag v2.5.0
+git push origin v2.5.0
 ```
 
-## Code signing (Windows)
+## Подпись кода (Windows)
 
-CI uploads **unsigned** binaries. For production SOC rollouts, sign locally
-or in a protected runner with your org certificate:
+CI загружает **неподписанные** бинарники. Для боевой раздачи в SOC
+подписывайте локально или на защищённом раннере корпоративным
+сертификатом:
 
 ```bat
 signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 ^
@@ -27,14 +28,15 @@ signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 ^
   /a dist\soc-log-anonymizer-cli.exe
 ```
 
-See also [WINDOWS_EXE.md](WINDOWS_EXE.md) (SmartScreen notes).
+См. также [WINDOWS_EXE.md](WINDOWS_EXE.md) (заметки про SmartScreen).
 
 ## PyPI
 
-Workflow `.github/workflows/publish-pypi.yml` publishes on tags when
-`PYPI_API_TOKEN` (or Trusted Publishing) is configured in repo secrets.
+Workflow `.github/workflows/publish-pypi.yml` публикует пакет по тегам,
+если в секретах репозитория настроен `PYPI_API_TOKEN` (или Trusted
+Publishing).
 
-Manual:
+Вручную:
 
 ```bash
 pip install -e ".[dev]"
@@ -42,5 +44,5 @@ python -m build
 python -m twine upload dist/*
 ```
 
-Package name: `soc-log-anonymizer` (stdlib-only runtime; `dev`/`publish` extras
-are optional).
+Имя пакета: `soc-log-anonymizer` (runtime только на стандартной
+библиотеке; extras `dev` / `publish` опциональны).
