@@ -263,6 +263,33 @@ class GuiChromeMixin:
         return f"{description} ({accel})" if accel else description
 
 
+    def _set_cancel_visible(self, visible: bool) -> None:
+        """Показать «Отменить» только на время долгой операции."""
+        btn = getattr(self, "btn_cancel", None)
+        if btn is None:
+            return
+
+        def _is_packed(widget) -> bool:
+            try:
+                widget.pack_info()
+                return True
+            except tk.TclError:
+                return False
+
+        if visible:
+            btn.config(state=tk.NORMAL)
+            if not _is_packed(btn):
+                undo = getattr(self, "btn_undo", None)
+                if undo is not None and _is_packed(undo):
+                    btn.pack(side=tk.LEFT, padx=(4, 0), after=undo)
+                else:
+                    btn.pack(side=tk.LEFT, padx=(4, 0))
+        else:
+            btn.config(state=tk.DISABLED)
+            if _is_packed(btn):
+                btn.pack_forget()
+
+
     def _palette(self) -> dict:
         return PALETTE_DARK if self.dark_mode.get() else PALETTE_LIGHT
 

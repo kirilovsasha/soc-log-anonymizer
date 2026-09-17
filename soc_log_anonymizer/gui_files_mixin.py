@@ -321,7 +321,7 @@ class GuiFilesMixin:
         self._prefer_sidecar = prefer_sidecar
         self.btn_open.config(state=tk.DISABLED)
         self.btn_open_folder.config(state=tk.DISABLED)
-        self.btn_cancel.config(state=tk.NORMAL)
+        self._set_cancel_visible(True)
         self._cancel_event.clear()
         self._set_status(
             f"Загрузка файлов ({len(file_paths)})…" if len(file_paths) > 1 else "Загрузка файла…",
@@ -356,7 +356,7 @@ class GuiFilesMixin:
     def _on_file_loaded(self, content: Optional[str], errors=None, loaded=None):
         self.btn_open.config(state=tk.NORMAL)
         self.btn_open_folder.config(state=tk.NORMAL)
-        self.btn_cancel.config(state=tk.DISABLED)
+        self._set_cancel_visible(False)
         self._loaded_files = list(loaded or [])
         self.files_list.delete(0, tk.END)
         for path in self._loaded_files:

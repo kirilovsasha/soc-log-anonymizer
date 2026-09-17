@@ -66,7 +66,7 @@ class GuiProcessMixin:
                 return
 
         self.btn_process.config(state=tk.DISABLED)
-        self.btn_cancel.config(state=tk.NORMAL)
+        self._set_cancel_visible(True)
         self._cancel_event.clear()
         self._set_progress(0)
         self._set_status("Обработка…", "Info")
@@ -135,7 +135,7 @@ class GuiProcessMixin:
             )
         anonymizer.clear_sensitive_data()
         self.btn_process.config(state=tk.NORMAL)
-        self.btn_cancel.config(state=tk.DISABLED)
+        self._set_cancel_visible(False)
         if not partial_text:
             self._set_status("Обработка отменена", "Muted")
 
@@ -181,7 +181,7 @@ class GuiProcessMixin:
         self.refresh_mapping_table()
         self._refresh_diff_highlighting()
         self.btn_process.config(state=tk.NORMAL)
-        self.btn_cancel.config(state=tk.DISABLED)
+        self._set_cancel_visible(False)
         self._set_progress(100)
 
         status_text, status_kind = format_result_status(is_safe, issues)

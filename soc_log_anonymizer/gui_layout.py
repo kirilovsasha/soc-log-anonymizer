@@ -11,6 +11,7 @@ from .gui_constants import (
     FONT_UI,
     ICON_CLEAR,
     ICON_COPY,
+    ICON_DEANON,
     ICON_DICE,
     ICON_DIFF,
     ICON_LOCK,
@@ -46,6 +47,10 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
     left = ttk.Frame(bar, style="Card.TFrame")
     left.pack(side=tk.LEFT)
 
+    def _toolbar_sep() -> None:
+        sep = ttk.Separator(left, orient=tk.VERTICAL)
+        sep.pack(side=tk.LEFT, fill=tk.Y, padx=8, pady=2)
+
     open_btn = ttk.Menubutton(
         left, text=f"{ICON_OPEN}  Открыть ▾", style="Ghost.TMenubutton"
     )
@@ -69,6 +74,18 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
         app._action_tooltip("start_processing_thread", "Анонимизировать текст из левого окна"),
     )
 
+    app.btn_deanonymize = ttk.Button(
+        left, text=f"{ICON_DEANON}  Деанонимизировать", style="Ghost.TButton",
+        command=app.deanonymize_text,
+    )
+    app.btn_deanonymize.pack(side=tk.LEFT, padx=(0, 6))
+    app._attach_tooltip_text(
+        app.btn_deanonymize,
+        app._action_tooltip("deanonymize_text", "Восстановить исходные значения по таблице соответствия"),
+    )
+
+    _toolbar_sep()
+
     app.btn_copy = ttk.Button(
         left, text=f"{ICON_COPY}  Копировать", style="Ghost.TButton",
         command=app.copy_result,
@@ -79,24 +96,26 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
         app._action_tooltip("copy_result", "Скопировать результат в буфер обмена"),
     )
 
+    app.btn_save = ttk.Button(
+        left, text=f"{ICON_SAVE}  Сохранить", style="Ghost.TButton",
+        command=app.save_file,
+    )
+    app.btn_save.pack(side=tk.LEFT, padx=(0, 6))
+    app._attach_tooltip_text(
+        app.btn_save,
+        app._action_tooltip("save_file", "Сохранить результат в файл"),
+    )
+
+    _toolbar_sep()
+
     app.btn_clear = ttk.Button(
         left, text=f"{ICON_CLEAR}  Очистить всё", style="Ghost.TButton",
         command=app.clear_all,
     )
-    app.btn_clear.pack(side=tk.LEFT, padx=(0, 6))
+    app.btn_clear.pack(side=tk.LEFT, padx=(0, 4))
     app._attach_tooltip_text(
         app.btn_clear,
         app._action_tooltip("clear_all", "Очистить оба окна и таблицу соответствия"),
-    )
-
-    app.btn_cancel = ttk.Button(
-        left, text="Отменить", style="Danger.TButton",
-        command=app.cancel_operation, state=tk.DISABLED,
-    )
-    app.btn_cancel.pack(side=tk.LEFT, padx=(0, 4))
-    app._attach_tooltip_text(
-        app.btn_cancel,
-        app._action_tooltip("cancel_operation", "Отменить текущую обработку"),
     )
 
     app.btn_undo = ttk.Button(
@@ -109,23 +128,26 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
         app._action_tooltip("undo_last", "Отменить последнюю операцию анонимизации"),
     )
 
+    # Shown only while a long-running op is active (see _set_cancel_visible).
+    app.btn_cancel = ttk.Button(
+        left, text="Отменить", style="Danger.TButton",
+        command=app.cancel_operation, state=tk.DISABLED,
+    )
+    app._attach_tooltip_text(
+        app.btn_cancel,
+        app._action_tooltip("cancel_operation", "Отменить текущую обработку"),
+    )
+
     right = ttk.Frame(bar, style="Card.TFrame")
     right.pack(side=tk.RIGHT)
 
     more = ttk.Menubutton(right, text="Ещё ▾", style="Ghost.TMenubutton")
     more_menu = tk.Menu(more, tearoff=False)
-    more_menu.add_command(label=f"{ICON_SAVE}  Сохранить результат", command=app.save_file)
-    more_menu.add_command(label="Деанонимизировать", command=app.deanonymize_text)
-    more_menu.add_separator()
     more_menu.add_command(label=f"{ICON_DIFF} HTML Diff отчёт", command=app.export_diff_html)
     more_menu.add_command(label=f"{ICON_STATS} Статистика", command=app.show_stats)
     more["menu"] = more_menu
     more.pack(side=tk.LEFT, padx=(0, 6))
-    app.btn_deanonymize = more
-    app._attach_tooltip_text(
-        more,
-        "Дополнительно: сохранить результат, деанонимизировать, HTML Diff, статистика",
-    )
+    app._attach_tooltip_text(more, "Отчёты: HTML Diff, статистика")
 
     app.btn_theme = ttk.Button(
         right, text=ICON_MOON, style="IconGhost.TButton", width=3,
