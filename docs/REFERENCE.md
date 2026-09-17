@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
 [![Dependencies](https://img.shields.io/badge/dependencies-0%20(stdlib%20only)-brightgreen)](#features)
-[![Version](https://img.shields.io/badge/version-2.4.0-informational)](../soc_log_anonymizer/__init__.py)
+[![Version](https://img.shields.io/badge/version-2.5.0-informational)](../soc_log_anonymizer/__init__.py)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#installation)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-ff69b4)](#tests)
 
@@ -82,6 +82,10 @@
   нормализованных событий SIEM (**MaxPatrol 10** и подобные): один и тот
   же список `sensitive_json_keys` работает и для плоских ключей
   (`SubjectAccountName`), и для вложенных путей (`subject.account.name`).
+  В дефолте также покрыты поля таксономии **MaxPatrol 10 / PT SIEM**:
+  `event_src.host`/`event_src.ip`, `recv_ipv4`, `src`/`dst` (ip/host/mac),
+  `subject`/`object` (account/email/phone), `asset.*` — и в nested JSON, и
+  в плоском экспорте API с точечными ключами.
 - 🔁 Одно и то же значение везде получает один и тот же псевдоним
   (см. [ниже](#pseudonymization)).
 - 🔑 **HMAC-SHA256 с ключом, растянутым через PBKDF2** (см.
@@ -698,7 +702,11 @@ JSON и путь к файлу (или, если файл ещё не найде
 | #️⃣ Хэш (MD5/SHA1/SHA256/NTLM) | `5f4dcc3b...` | `[HASH_...]` |
 | 🆔 UUID/GUID | `6ba7b810-9dad-...` | `[UUID_...]` (nil GUID — не маскируется) |
 | 📧 Email | `jdoe@bank.com` | `[EMAIL_...]` |
-| 📱 Телефон | `+375291234567` | `[PHONE_...]` |
+| 📱 Телефон | `+375291234567` / `80291234567` | `[PHONE_...]` (по умолчанию partial) |
+| 🇧🇾 УНП | `200988541` | `[UNP_...]` |
+| 💳 PAN / карта | `4111111111111111` | `[PAN_...]` + last4 (partial) |
+| 🏦 IBAN BY | `BY13AKBB…` | `BY13` + `[IBAN_...]` (partial) |
+| 🪪 Личный номер | `3011089A001PB1` | `[BY_ID_...]` (partial) |
 | 🌐 FQDN/домен | `db01.bank.local` | `[FQDN_...]` |
 | 👤 Windows-логин `DOMAIN\user` | `CORP\jdoe` | `[USER_...]` |
 | 🔌 MAC-адрес | `00:1A:2B:3C:4D:5E` | `[MAC_...]` |
@@ -906,21 +914,31 @@ CLI использует стандартный модуль `logging` вмес�
   отдельным валидным JSON/NDJSON-документом, эвристика может её не
   подхватить — используйте полноценный JSON/NDJSON вход там, где это
   возможно, чтобы сработала точная логика по ключам.
-- `AUTH_USER`/`AUTH_USER_CISCO` (упоминания пользователя без `=`/`:` —
-  sshd/su/Cisco) рассчитаны на конкретный, ограниченный набор конструкций
-  (`Accepted/Failed password for`, `session opened for user`, `'su X'`,
-  `for user "X"`, `by X on vtyN`) — это не универсальный парсер
-  произвольного естественного языка. В частности, в строке su вида
-  `'su root' failed for lonvick on /dev/pts/8` маскируется только
-  целевой пользователь в кавычках (`root`), но не реальный инициатор
-  действия (`lonvick`) — конструкция `for X on` слишком общая, чтобы
-  безопасно матчить её без разбора остального контекста строки (риск
-  ложных срабатываний на несвязанном тексте перевешивает пользу).
+- `AUTH_USER`/`AUTH_USER_CISCO`/`AUTH_USER_SU_FROM`/`AUTH_USER_SUDO`/
+  `AUTH_USER_WIN` (упоминания пользователя без `=`/`:` — sshd/su/Cisco/
+  sudo/Windows Account Name) рассчитаны на конкретный, ограниченный набор
+  конструкций (`Accepted/Failed password for`, `Invalid user`,
+  `authentication failure for`, `session opened for user`, `'su X'`,
+  `for user "X"`, `by X on vtyN`, `sudo: X :`, `Account Name:`) — это не
+  универсальный парсер произвольного естественного языка. Инициатор su в
+  строке `'su root' failed for lonvick on /dev/pts/8` маскируется
+  отдельным паттерном `AUTH_USER_SU_FROM` (требует хвост ` on`, чтобы не
+  ловить произвольное `for X on` в прозе).
+- Встроенные BY-идентификаторы: УНП (контрольная сумма), личный номер,
+  IBAN `BY…`, PAN (Luhn). Имена/фамилии в свободном тексте по-прежнему
+  не распознаются (нет NLP).
+- `mask_strategies` (по умолчанию partial для PHONE/PAN/IBAN/BY_ID): при
+  partial деанонимизация восстанавливает только захэшированную середину;
+  видимые края (last4 карты, префикс телефона) остаются как есть — это
+  осознанный trade-off для SOC-анализа перед LLM.
+- `verify()` дополнен residual-сканом (email, `DOMAIN\user`, BY phone/UNP/
+  PAN-эвристики). Отключается `"residual_scan": false`.
+- `PHONE`/`FQDN` покрывают только префиксы/TLD, перечисленные в
+  конфигурации — расширяйте под свою специфику логов. Для РБ в дефолте:
+  `+375`/`80xx` и TLD `by`.
 - Паттерн `USER` (`DOMAIN\user`) может технически ложно сработать на
   произвольном тексте вида `Слово\ДругоеСлово` — унаследованная
   особенность формата Windows-логинов.
-- `PHONE`/`FQDN` покрывают только префиксы/TLD, перечисленные в
-  конфигурации — расширяйте под свою специфику логов.
 - `--stream` and `anonymize_stream()` accumulate pretty-printed JSON
   documents that span multiple lines (brace-balanced via
   `json.JSONDecoder.raw_decode`) and mask them with `anonymize_json`.

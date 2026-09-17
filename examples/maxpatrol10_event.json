@@ -1,0 +1,17 @@
+{
+  "_comment": "Sample MaxPatrol 10 / PT SIEM normalized event (flat dotted keys, as in API export).",
+  "time": "2026-09-17T10:22:01.0000000Z",
+  "id": "PT_Microsoft_Windows_eventlog_4624_An_account_was_successfully_logged_on",
+  "event_src.host": "dc01.bank.by",
+  "event_src.ip": "10.0.0.10",
+  "subject.account.name": "jdoe",
+  "subject.account.domain": "BANK",
+  "subject.account.id": "S-1-5-21-3623811015-3361044348-30300820-1013",
+  "src.ip": "10.0.0.55",
+  "src.host": "ws55.bank.by",
+  "dst.ip": "10.0.0.10",
+  "recv_ipv4": "10.1.1.2",
+  "action": "login",
+  "status": "success",
+  "text": "The user jdoe successfully logged in on host dc01.bank.by"
+}

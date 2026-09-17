@@ -187,11 +187,44 @@ def _default_sensitive_json_keys() -> List[str]:
         # Windows Event XML/JSON flattened
         "targetusername", "subjectusername", "ipaddress", "targetdomainname",
         "subjectdomainname", "workstationname",
+        # Belarus / banking PII fields (SIEM JSON)
+        "unp", "vat", "taxid", "tax_id", "payerid", "iban", "pan", "card", "cardnumber",
+        "card_number", "accountnumber", "account_number", "personalnumber",
+        "personal_number", "passport", "passportnumber", "mobile", "msisdn",
+        "accountname", "src_user_name", "dst_user_name", "user.name",
+        # MaxPatrol 10 / PT SIEM taxonomy (nested → flat path OR dotted export keys)
+        *_MAXPATROL10_JSON_KEYS,
     ]
 
 
+# MaxPatrol SIEM / MP10 event schema — sensitive identifiers only (not action/status/…).
+# Listed in both dotted and flat spellings so exports like {"event_src.host": "…"}
+# and nested {"event_src": {"host": "…"}} hit the same config entries after normalize.
+_MAXPATROL10_JSON_KEYS: List[str] = [
+    # Subject / object accounts
+    "subject.account.name", "subject.account.id", "subject.account.domain",
+    "subject.account.session_id", "subject.account.privileges",
+    "object.account.name", "object.account.id", "object.account.domain",
+    "subject.name", "object.name", "subject.id", "object.id",
+    "subject.email", "object.email", "subject.phone", "object.phone",
+    # Network endpoints
+    "src.ip", "src.host", "src.hostname", "src.fqdn", "src.mac", "src.geo",
+    "dst.ip", "dst.host", "dst.hostname", "dst.fqdn", "dst.mac", "dst.geo",
+    "src.ip.v4", "src.ip.v6", "dst.ip.v4", "dst.ip.v6",
+    # Event source / collector
+    "event_src.ip", "event_src.host", "event_src.hostname", "event_src.fqdn",
+    "event_src.mac", "recv_ipv4", "recv_ipv6", "recv_host",
+    # Assets / identities often present on correlated events
+    "asset", "asset.name", "asset.fqdn", "asset.ip",
+    "logon_service", "external_id",
+    # Flat camel aliases sometimes used in custom packs
+    "SubjectAccountId", "ObjectAccountId", "SubjectAccountSessionId",
+    "EventSrcHost", "EventSrcIp", "RecvIpv4", "RecvIpv6",
+]
+
+
 def _default_key_type_hints() -> Dict[str, str]:
-    return {
+    hints = {
         "ip": "IP", "ipaddress": "IP", "srcip": "IP", "destip": "IP", "dstip": "IP",
         "sourceip": "IP", "destinationip": "IP", "clientip": "IP",
         "calleripaddress": "IP", "sourceipaddress": "IP", "ipaddressorproxy": "IP",
@@ -205,11 +238,43 @@ def _default_key_type_hints() -> Dict[str, str]:
         "mailnickname": "USER", "subjectusername": "USER",
         "targetdomainname": "USER", "subjectdomainname": "USER",
         "principalid": "USER", "sessionissuer": "USER",
+        "accountname": "USER", "srcusername": "USER", "dstusername": "USER",
+        "username_field": "USER",
         "password": "SECRET", "passwd": "SECRET", "secret": "SECRET",
         "token": "SECRET", "apikey": "SECRET", "authorization": "SECRET",
         "accesskeyid": "SECRET", "arn": "SECRET",
-        "phone": "PHONE",
+        "phone": "PHONE", "mobile": "PHONE", "msisdn": "PHONE",
+        "unp": "UNP", "vat": "UNP", "taxid": "UNP", "tax_id": "UNP", "payerid": "UNP",
+        "iban": "IBAN",
+        "pan": "PAN", "card": "PAN", "cardnumber": "PAN", "card_number": "PAN",
+        "personalnumber": "BY_ID", "personal_number": "BY_ID",
+        "passport": "BY_ID", "passportnumber": "BY_ID",
+        "accountnumber": "SECRET", "account_number": "SECRET",
+        # MaxPatrol 10
+        "subject.account.name": "USER", "object.account.name": "USER",
+        "subject.account.id": "USER", "object.account.id": "USER",
+        "subject.account.domain": "USER", "object.account.domain": "USER",
+        "subject.account.session_id": "USER", "subject.account.privileges": "USER",
+        "subject.name": "USER", "object.name": "USER",
+        "subject.id": "USER", "object.id": "USER",
+        "subject.email": "EMAIL", "object.email": "EMAIL",
+        "subject.phone": "PHONE", "object.phone": "PHONE",
+        "src.ip": "IP", "dst.ip": "IP", "src.ip.v4": "IP", "src.ip.v6": "IP",
+        "dst.ip.v4": "IP", "dst.ip.v6": "IP",
+        "event_src.ip": "IP", "recv_ipv4": "IP", "recv_ipv6": "IP", "asset.ip": "IP",
+        "src.host": "FQDN", "dst.host": "FQDN", "src.hostname": "FQDN", "dst.hostname": "FQDN",
+        "src.fqdn": "FQDN", "dst.fqdn": "FQDN",
+        "event_src.host": "FQDN", "event_src.hostname": "FQDN", "event_src.fqdn": "FQDN",
+        "recv_host": "FQDN", "asset": "FQDN", "asset.name": "FQDN", "asset.fqdn": "FQDN",
+        "src.mac": "MAC", "dst.mac": "MAC", "event_src.mac": "MAC",
+        "logon_service": "VALUE", "external_id": "VALUE",
+        "SubjectAccountId": "USER", "ObjectAccountId": "USER",
+        "SubjectAccountSessionId": "USER",
+        "EventSrcHost": "FQDN", "EventSrcIp": "IP",
+        "RecvIpv4": "IP", "RecvIpv6": "IP",
     }
+    return hints
+
 
 
 def _default_well_known_sids() -> List[str]:
@@ -227,12 +292,35 @@ def _default_well_known_sids() -> List[str]:
 
 
 def _default_phone_prefixes() -> List[str]:
-    return ["+375", "+7", "8029", "8044", "8033", "8025", "+1"]
+    # Belarus first: E.164 (+375 / 375) and local 80xx trunk codes.
+    # Bare operator codes (29/33/…) are intentionally omitted — they cause
+    # heavy false positives in free text; use +375… or 80xx… forms instead.
+    return [
+        "+375", "375",
+        "8029", "8033", "8044", "8025", "8017",
+        "+7", "+380", "+48", "+370", "+371", "+372", "+1", "+44",
+    ]
 
 
 def _default_fqdn_tlds() -> List[str]:
     return ["by", "com", "ru", "org", "net", "lan", "corp", "local",
             "internal", "gov", "io", "info", "edu", "mil", "biz", "co"]
+
+
+def _default_mask_strategies() -> Dict[str, str]:
+    """Per-type mask strategy: full | partial | format.
+
+    Belarus SOC→LLM default: keep edge digits for phones/cards/IBANs so
+    analysts can still correlate without shipping the full value.
+    """
+    return {
+        "PHONE": "partial",
+        "PAN": "partial",
+        "CARD": "partial",
+        "IBAN": "partial",
+        "UNP": "full",
+        "BY_ID": "partial",
+    }
 
 
 def _default_cef_fields() -> List[str]:
@@ -262,6 +350,12 @@ def _default_user_field_names() -> List[str]:
         "target_user", "targetuser", "accountname", "object.account.name",
         # Fortinet / Palo Alto key=value style
         "usr", "xauth_user", "srcname", "dstname",
+        # Elastic / Windows Event text
+        "user.name", "src_user_name", "dst_user_name", "account_name",
+        # MaxPatrol 10 dotted fields in free-text / KV exports
+        "subject.account.name", "object.account.name",
+        "subject.account.id", "object.account.id",
+        "event_src.host", "event_src.ip",
     ]
 
 
@@ -288,7 +382,7 @@ _LIST_FIELDS = {
     "org_aliases", "user_field_names", "secret_field_names", "cef_user_fields",
     "allowlist", "fqdn_stopwords",
 }
-_DICT_FIELDS = {"key_type_hints", "custom_patterns"}
+_DICT_FIELDS = {"key_type_hints", "custom_patterns", "mask_strategies"}
 
 
 @dataclass
@@ -379,6 +473,17 @@ class AnonymizerConfig:
     fqdn_tlds: List[str] = field(default_factory=_default_fqdn_tlds)
     cef_fields: List[str] = field(default_factory=_default_cef_fields)
 
+    # Per-type strategy for built-in detectors (full / partial / format).
+    # Unknown types fall back to "full". Custom patterns keep their own
+    # strategy field and are not overridden here.
+    mask_strategies: Dict[str, str] = field(default_factory=_default_mask_strategies)
+
+    # After anonymization, residual_scan looks for leftover PII heuristics
+    # (emails, DOMAIN\\user, BY phones/UNP/PAN, …) beyond the same regexes
+    # used to mask — critical for --fail-on-unsafe before LLM upload.
+    residual_scan: bool = True
+    residual_min_digit_run: int = 12
+
     # Имена полей в свободном тексте (key=value / key: value), после
     # которых значение форсированно считается username/секретом, даже
     # если само значение не похоже ни на один более специфичный формат
@@ -428,6 +533,14 @@ class AnonymizerConfig:
             self.context_rules = [dict(rule) for rule in self.context_rules if isinstance(rule, dict)]
         self.allowlist = _uniq_ci(coerce_text_list(self.allowlist))
         self.fqdn_stopwords = [str(v).strip() for v in self.fqdn_stopwords if str(v).strip()]
+        if isinstance(self.mask_strategies, dict):
+            self.mask_strategies = {
+                str(k).upper().strip(): str(v).lower().strip()
+                for k, v in self.mask_strategies.items()
+                if str(k).strip() and str(v).strip()
+            }
+        else:
+            self.mask_strategies = _default_mask_strategies()
         return self
 
     def iter_custom_patterns(self):
@@ -547,6 +660,9 @@ class AnonymizerConfig:
             "secret_field_names": list,
             "custom_patterns": dict,
             "allowlist": list,
+            "mask_strategies": dict,
+            "residual_scan": bool,
+            "residual_min_digit_run": int,
         }
         for name, expected in expected_types.items():
             value = getattr(self, name)
@@ -605,6 +721,15 @@ class AnonymizerConfig:
 
         if not self.secret_field_names:
             issues.append("secret_field_names пуст — секреты в key=value полях не будут распознаваться.")
+
+        allowed_strategies = {"full", "partial", "format"}
+        for tag, strategy in (self.mask_strategies or {}).items():
+            if strategy not in allowed_strategies:
+                issues.append(
+                    f"mask_strategies[{tag!r}]={strategy!r} — допустимы: full, partial, format."
+                )
+        if self.residual_min_digit_run < 8 or self.residual_min_digit_run > 32:
+            issues.append("residual_min_digit_run должен быть в диапазоне [8, 32].")
 
         unknown_cef_user = set(f.lower() for f in self.cef_user_fields) - set(f.lower() for f in self.cef_fields)
         if unknown_cef_user:

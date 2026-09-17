@@ -109,6 +109,19 @@ from .parallel_merge import (
     install_merged_mapping,
     merge_mappings_deterministic,
 )
+from .pii import (
+    BY_PERSONAL_ID_RE,
+    IBAN_BY_RE,
+    PAN_RE,
+    UNP_RE,
+    is_plausible_by_personal_id,
+    is_plausible_iban_by,
+    is_plausible_pan,
+    is_valid_unp,
+    pan_digits,
+    residual_risk_score,
+    residual_scan,
+)
 from .result import AnonymizeResult
 from .structured import join_continued_lines, mask_structured_line
 
@@ -163,7 +176,8 @@ class SOCLogAnonymizer:
     # USER_FIELD/JSON) по конкретному типу данных. Порядок важен: более
     # специфичные форматы должны проверяться раньше более общих.
     CLASSIFY_ORDER = [
-        "JWT", "SID", "HASH", "UUID", "MAC", "IP_NET", "IP", "EMAIL", "USER", "FQDN", "PHONE",
+        "JWT", "SID", "HASH", "UUID", "MAC", "IP_NET", "IP", "EMAIL",
+        "IBAN", "UNP", "BY_ID", "PAN", "USER", "FQDN", "PHONE",
         "URL", "TOKEN", "CLOUD_SECRET", "SSH_KEY", "CONN_STR",
     ]
 
@@ -361,17 +375,21 @@ class SOCLogAnonymizer:
             ("CEF_KV", re.compile(rf'(?i)\b({cef_alt})=([^\s,;()\[\]{{}}]{{1,{n}}})')),
 
             ("SECRET", re.compile(
-                rf'(?i){fp_lookbehind}(\b(?:{secret_alt})\b\s*[:=]\s*["\']?)'
-                rf'([^\s,;()\[\]{{}}`\'\"]{{1,{n}}})'
+                rf'(?i){fp_lookbehind}(\b(?:{secret_alt})\b\s*[:=]\s*)'
+                rf'(?:"([^"]{{1,{n}}})"|\'([^\']{{1,{n}}})\'|'
+                rf'([^\s,;()\[\]{{}}`\'\"]{{1,{n}}}))'
             )),
 
             ("USER_FIELD", re.compile(
-                rf'(?i){fp_lookbehind}(\b(?:{user_alt})\b\s*[:=]\s*["\']?)'
-                rf'([^\s,;()\[\]{{}}`\'\"]{{1,{n}}})'
+                rf'(?i){fp_lookbehind}(\b(?:{user_alt})\b\s*[:=]\s*)'
+                rf'(?:"([^"]{{1,{n}}})"|\'([^\']{{1,{n}}})\'|'
+                rf'([^\s,;()\[\]{{}}`\'\"]{{1,{n}}}))'
             )),
 
             ("AUTH_USER", re.compile(
                 r'(?i)(\b(?:accepted|failed)\s+password\s+for\s+(?:invalid\s+user\s+)?'
+                r'|\binvalid\s+user\s+'
+                r'|\bauthentication\s+failure\s+for\s+(?:user\s+)?'
                 r'|\bsession\s+(?:opened|closed)\s+for\s+user\s+'
                 r'|\bfor\s+user\s+["\']'
                 r"|'su\s+(?:-\s+)?"
@@ -379,7 +397,7 @@ class SOCLogAnonymizer:
                 # Fortinet / generic quoted login
                 r'|\buser\s+["\']'
                 r'|\blogin\s+["\']'
-                r')([A-Za-z0-9_.-]+)'
+                r')([A-Za-z0-9_.$@-]+)'
             )),
 
             # su initiator after quoted target: "'su root' failed for lonvick on ..."
@@ -396,6 +414,16 @@ class SOCLogAnonymizer:
                 r')'
             )),
 
+            # Linux sudo: "sudo: alice : TTY=pts/0 ; ..."
+            ("AUTH_USER_SUDO", re.compile(
+                r'(?i)(\bsudo:\s+)([A-Za-z0-9_.-]+)(?=\s*:)'
+            )),
+
+            # Windows Event text: "Account Name:\tjdoe" / "Account Name: jdoe"
+            ("AUTH_USER_WIN", re.compile(
+                r'(?i)(\bAccount\s+Name:\s*)([A-Za-z0-9_.$@\\-]+)'
+            )),
+
             ("USER_PATH", re.compile(
                 r'(?i)(?:[A-Za-z]:\\Users\\|/home/|/Users/)([A-Za-z0-9._-]+)'
             )),
@@ -408,7 +436,15 @@ class SOCLogAnonymizer:
 
             ("EMAIL", re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b')),
 
-            ("PHONE", re.compile(rf'(?:{phone_alt})\s*\(?\d{{2,4}}\)?[\s.-]?\d{{3}}[\s.-]?\d{{2}}[\s.-]?\d{{2}}\b')),
+            # Belarus banking / tax identifiers (validated in _sub_*).
+            ("IBAN", IBAN_BY_RE),
+            ("UNP", UNP_RE),
+            ("BY_ID", BY_PERSONAL_ID_RE),
+            ("PAN", PAN_RE),
+
+            ("PHONE", re.compile(
+                rf'(?:{phone_alt})(?:[\s()./-]*\d){{7,12}}\b'
+            )),
 
             ("FQDN", re.compile(rf'\b(?:[a-zA-Z0-9-]+\.)+(?:{tld_alt})\b', re.IGNORECASE)),
 
@@ -528,6 +564,14 @@ class SOCLogAnonymizer:
                 continue
             if tag == "USER" and not is_plausible_windows_user(v):
                 continue
+            if tag == "UNP" and not is_valid_unp(v):
+                continue
+            if tag == "PAN" and not is_plausible_pan(v):
+                continue
+            if tag == "IBAN" and not is_plausible_iban_by(v):
+                continue
+            if tag == "BY_ID" and not is_plausible_by_personal_id(v):
+                continue
             return tag
         return "VALUE"
 
@@ -590,10 +634,15 @@ class SOCLogAnonymizer:
     def _sub_key_value_generic(self, default_tag: str):
         """Замыкание для SECRET/USER_FIELD: сохраняет неизменным префикс
         (m.group(1) — сама конструкция "user=", "password:" и т.п.),
-        заменяет значение (m.group(2)) на псевдоним, классифицированный
-        по содержимому с откатом на default_tag (см. _hash_classified)."""
+        заменяет значение на псевдоним. Поддерживает quoted forms
+        ``key="value with spaces"`` / ``key='value'`` / bare token."""
         def _inner(m: "re.Match") -> str:
-            return f"{m.group(1)}{self._hash_classified(m.group(2), default_tag)}"
+            prefix = m.group(1)
+            if m.group(2) is not None:
+                return f'{prefix}"{self._hash_classified(m.group(2), default_tag)}"'
+            if m.group(3) is not None:
+                return f"{prefix}'{self._hash_classified(m.group(3), default_tag)}'"
+            return f"{prefix}{self._hash_classified(m.group(4), default_tag)}"
         return _inner
 
     def _sub_force_tag(self, tag: str):
@@ -676,11 +725,27 @@ class SOCLogAnonymizer:
             return val
         return self._hash_val(val, "UUID")
 
+    def _strategy_for(self, prefix: str) -> str:
+        strategies = getattr(self.config, "mask_strategies", None) or {}
+        return str(strategies.get(prefix, "full")).lower()
+
     def _mask_value(self, value: str, prefix: str, strategy: str = "full") -> str:
         if strategy == "partial":
+            # Payment cards: keep last 4 digits (analyst-friendly, PCI-ish).
+            if prefix in ("PAN", "CARD"):
+                digits = pan_digits(value)
+                if len(digits) >= 10:
+                    return f"{self._hash_val(digits[:-4], prefix)}{digits[-4:]}"
+            # IBAN: keep country + check digits visible.
+            if prefix == "IBAN" and len(value) >= 8:
+                head = value[:4]
+                return f"{head}{self._hash_val(value[4:], prefix)}"
             if len(value) <= 2:
                 return self._hash_val(value, prefix)
             keep = max(1, min(2, len(value) // 4))
+            # Phones: keep a slightly wider head so +375 stays recognizable.
+            if prefix == "PHONE" and value.lstrip().startswith(("+", "375", "80")):
+                keep = min(4, max(2, len(value) // 5))
             head = value[:keep]
             tail = value[-keep:] if keep else ""
             middle = value[keep:-keep] if keep else value
@@ -700,8 +765,10 @@ class SOCLogAnonymizer:
         return self._hash_val(value, prefix)
 
     def _sub_generic(self, prefix: str):
+        strategy = self._strategy_for(prefix)
+
         def _inner(m: "re.Match") -> str:
-            return self._hash_val(m.group(0), prefix)
+            return self._mask_value(m.group(0), prefix, strategy)
         return _inner
 
     def _sub_custom(self, meta: Dict[str, Any]):
@@ -761,7 +828,31 @@ class SOCLogAnonymizer:
         value = m.group(0)
         if not is_plausible_phone(value):
             return value
-        return self._hash_val(value, "PHONE")
+        return self._mask_value(value, "PHONE", self._strategy_for("PHONE"))
+
+    def _sub_unp(self, m: "re.Match") -> str:
+        value = m.group(0)
+        if not is_valid_unp(value):
+            return value
+        return self._mask_value(value, "UNP", self._strategy_for("UNP"))
+
+    def _sub_pan(self, m: "re.Match") -> str:
+        value = m.group(0)
+        if not is_plausible_pan(value):
+            return value
+        return self._mask_value(value, "PAN", self._strategy_for("PAN"))
+
+    def _sub_iban(self, m: "re.Match") -> str:
+        value = m.group(0)
+        if not is_plausible_iban_by(value):
+            return value
+        return self._mask_value(value, "IBAN", self._strategy_for("IBAN"))
+
+    def _sub_by_id(self, m: "re.Match") -> str:
+        value = m.group(0)
+        if not is_plausible_by_personal_id(value):
+            return value
+        return self._mask_value(value, "BY_ID", self._strategy_for("BY_ID"))
 
     def _sub_windows_user(self, m: "re.Match") -> str:
         value = m.group(0)
@@ -804,11 +895,12 @@ class SOCLogAnonymizer:
                 text = pattern.sub(self._sub_key_value_generic("SECRET"), text)
             elif prefix == "USER_FIELD":
                 text = pattern.sub(self._sub_key_value_generic("USER"), text)
-            elif prefix in ("AUTH_USER", "AUTH_USER_CISCO", "AUTH_USER_SU_FROM"):
+            elif prefix in ("AUTH_USER", "AUTH_USER_CISCO", "AUTH_USER_SU_FROM",
+                            "AUTH_USER_SUDO", "AUTH_USER_WIN"):
                 text = pattern.sub(self._sub_auth_user, text)
             elif prefix == "ORG":
                 text = pattern.sub(self._sub_org, text)
-            elif prefix == "IP":
+            elif prefix in ("IP", "IP_NET"):
                 text = pattern.sub(self._sub_ip, text)
             elif prefix == "HASH":
                 text = pattern.sub(self._sub_hash, text)
@@ -816,6 +908,14 @@ class SOCLogAnonymizer:
                 text = pattern.sub(self._sub_fqdn, text)
             elif prefix == "PHONE":
                 text = pattern.sub(self._sub_phone, text)
+            elif prefix == "UNP":
+                text = pattern.sub(self._sub_unp, text)
+            elif prefix == "PAN":
+                text = pattern.sub(self._sub_pan, text)
+            elif prefix == "IBAN":
+                text = pattern.sub(self._sub_iban, text)
+            elif prefix == "BY_ID":
+                text = pattern.sub(self._sub_by_id, text)
             elif prefix == "USER":
                 text = pattern.sub(self._sub_windows_user, text)
             elif prefix == "BASE64_CMD":
@@ -951,12 +1051,14 @@ class SOCLogAnonymizer:
                 elif matched_key and isinstance(val, str) and val:
                     tag = self._classify_value(val)
                     if tag == "VALUE":
+                        needle = self._normalize_json_key(matched_key)
                         tag = next(
                             (
                                 hint
                                 for configured_key, hint in self.config.key_type_hints.items()
-                                if self._normalize_json_key(configured_key)
-                                == self._normalize_json_key(matched_key)
+                                if self._normalize_json_key(configured_key) in (
+                                    needle, full_path, clean_key
+                                )
                             ),
                             "SENSITIVE",
                         )
@@ -1142,6 +1244,14 @@ class SOCLogAnonymizer:
                     continue
                 if tag == "USER" and not is_plausible_windows_user(value):
                     continue
+                if tag == "UNP" and not is_valid_unp(value):
+                    continue
+                if tag == "PAN" and not is_plausible_pan(value):
+                    continue
+                if tag == "IBAN" and not is_plausible_iban_by(value):
+                    continue
+                if tag == "BY_ID" and not is_plausible_by_personal_id(value):
+                    continue
                 matches.append({
                     "type": tag, "value": value,
                     "start": match.start(), "end": match.end(),
@@ -1156,6 +1266,13 @@ class SOCLogAnonymizer:
         for item in findings:
             by_type[item["type"]] = by_type.get(item["type"], 0) + 1
         safe, issues = self.verify(text)
+        residual = []
+        if getattr(self.config, "residual_scan", True):
+            residual = residual_scan(
+                text,
+                allowlist=self.config.allowlist,
+                min_digit_run=getattr(self.config, "residual_min_digit_run", 12),
+            )
         return {
             "safe": safe,
             "issues": issues,
@@ -1163,22 +1280,29 @@ class SOCLogAnonymizer:
             "found": findings,
             "total_found": len(findings),
             "by_type": by_type,
+            "residual": [{"type": kind, "value": sample} for kind, sample in residual],
+            "residual_risk": residual_risk_score(residual),
         }
 
     quality_report = get_quality_report
 
     def verify(self, text: str) -> Tuple[bool, List[str]]:
-        """Gatekeeper-проверка: прогоняет ВСЕ generic-паттерны заново по
-        итоговому тексту, чтобы поймать любые типы незамаскированных
-        данных, пропущенные основным проходом. Well-known SID и nil GUID
-        не считаются утечкой, т.к. маскируются намеренно."""
+        """Gatekeeper: re-run generic patterns, then optional residual heuristics.
+
+        Residual scan catches formats the main pass never learned — important
+        before shipping anonymized logs from the Windows EXE to an external LLM.
+        """
         issues = []
+        skip_tags = (
+            "CEF_KV", "SECRET", "USER_FIELD", "USER_PATH", "BASE64_CMD",
+            "AUTH_USER", "AUTH_USER_CISCO", "AUTH_USER_SU_FROM",
+            "AUTH_USER_SUDO", "AUTH_USER_WIN",
+        )
         for tag, pattern in self.patterns:
-            if tag in ("CEF_KV", "SECRET", "USER_FIELD", "USER_PATH", "BASE64_CMD",
-                       "AUTH_USER", "AUTH_USER_CISCO", "AUTH_USER_SU_FROM") or tag.startswith("CUSTOM:"):
+            if tag in skip_tags or tag.startswith("CUSTOM:"):
                 continue
 
-            def _leftovers():
+            def _leftovers(tag=tag, pattern=pattern):
                 for match in pattern.finditer(text):
                     value = match.group(0)
                     if is_allowlisted(value, self.config.allowlist):
@@ -1199,6 +1323,23 @@ class SOCLogAnonymizer:
                         continue
                     if tag == "USER" and not is_plausible_windows_user(value):
                         continue
+                    if tag == "UNP" and not is_valid_unp(value):
+                        continue
+                    if tag == "PAN" and not is_plausible_pan(value):
+                        continue
+                    if tag == "IBAN" and not is_plausible_iban_by(value):
+                        continue
+                    if tag == "BY_ID" and not is_plausible_by_personal_id(value):
+                        continue
+                    # Partial masks intentionally leave edge digits / IBAN head.
+                    if tag in ("PAN", "CARD") and self._strategy_for("PAN") == "partial":
+                        if re.fullmatch(r"\[[A-Z0-9_]+\]\d{4}", value) or value.endswith(
+                                tuple(str(i) for i in range(10))):
+                            # Skip pure leftover checks that are just trailing digits
+                            # from our own partial mask — handled below via pseudo check.
+                            pass
+                    if re.search(r"\[[A-Z][A-Z0-9_]+\]", value):
+                        continue
                     yield value
 
             leftovers = list(_leftovers())
@@ -1208,6 +1349,25 @@ class SOCLogAnonymizer:
                 issues.append("Обнаружено наименование организации")
             else:
                 issues.append(f"Обнаружены незамаскированные данные типа {tag}")
+
+        if getattr(self.config, "residual_scan", True):
+            residual = residual_scan(
+                text,
+                allowlist=self.config.allowlist,
+                min_digit_run=getattr(self.config, "residual_min_digit_run", 12),
+            )
+            # Ignore residual hits that are clearly our own partial masks:
+            # e.g. [PAN_abc…]1234 or +375[PHONE_…]67
+            filtered = []
+            for kind, sample in residual:
+                if "[" in sample and "]" in sample:
+                    continue
+                filtered.append((kind, sample))
+            if filtered:
+                kinds = sorted({kind for kind, _ in filtered})
+                issues.append(
+                    "Residual scan: возможная утечка (" + ", ".join(kinds) + ")"
+                )
         return len(issues) == 0, issues
 
     # ------------------------------------------------------------------
