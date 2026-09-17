@@ -69,6 +69,11 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
         command=app.copy_result,
     ).pack(side=tk.LEFT, padx=(0, 6))
 
+    ttk.Button(
+        left, text=f"{ICON_CLEAR}  Очистить всё", style="Ghost.TButton",
+        command=app.clear_all,
+    ).pack(side=tk.LEFT, padx=(0, 6))
+
     app.btn_cancel = ttk.Button(
         left, text="Отменить", style="Danger.TButton",
         command=app.cancel_operation, state=tk.DISABLED,
@@ -88,7 +93,6 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
     more_menu = tk.Menu(more, tearoff=False)
     more_menu.add_command(label=f"{ICON_SAVE}  Сохранить результат", command=app.save_file)
     more_menu.add_command(label="Деанонимизировать", command=app.deanonymize_text)
-    more_menu.add_command(label="Очистить всё", command=app.clear_all)
     more_menu.add_separator()
     more_menu.add_command(label=f"{ICON_DIFF} HTML Diff отчёт", command=app.export_diff_html)
     more_menu.add_command(label=f"{ICON_STATS} Статистика", command=app.show_stats)
