@@ -9,9 +9,24 @@ import logging
 import os
 import stat
 import subprocess
-from typing import Optional
+import sys
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger("soc_log_anonymizer")
+
+# Windowed PyInstaller GUI must not flash a console when spawning icacls.
+# CREATE_NO_WINDOW is available on Windows Python 3.7+; keep the numeric
+# fallback for older runtimes.
+_CREATE_NO_WINDOW = 0x08000000
+if sys.platform == "win32":
+    _CREATE_NO_WINDOW = int(getattr(subprocess, "CREATE_NO_WINDOW", _CREATE_NO_WINDOW))
+
+
+def _windows_hidden_run_kwargs() -> Dict[str, Any]:
+    """Kwargs so console-subsystem tools (icacls) do not flash a cmd window."""
+    if sys.platform != "win32":
+        return {}
+    return {"creationflags": _CREATE_NO_WINDOW}
 
 
 def restrict_sensitive_file(path: str) -> Optional[str]:
@@ -48,6 +63,7 @@ def _restrict_windows_acl(path: str) -> Optional[str]:
         ["icacls", path, "/inheritance:r"],
         ["icacls", path, "/grant:r", f"{user}:(R,W)"],
     ]
+    hidden = _windows_hidden_run_kwargs()
     for cmd in commands:
         try:
             completed = subprocess.run(
@@ -56,6 +72,7 @@ def _restrict_windows_acl(path: str) -> Optional[str]:
                 text=True,
                 timeout=15,
                 check=False,
+                **hidden,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             return (
@@ -100,6 +117,7 @@ def _check_windows_acl_hint(file_path: str) -> Optional[str]:
             text=True,
             timeout=15,
             check=False,
+            **_windows_hidden_run_kwargs(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
