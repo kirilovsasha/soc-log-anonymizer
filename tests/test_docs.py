@@ -15,7 +15,9 @@ class TestDocumentationExamples(unittest.TestCase):
             readme = handle.read()
         links = re.findall(r"\]\((?!https?://|#)([^)]+)\)", readme)
         for link in links:
-            self.assertTrue(os.path.exists(os.path.join(ROOT, link)), link)
+            path = link.split("#", 1)[0].split("?", 1)[0]
+            self.assertTrue(path, link)
+            self.assertTrue(os.path.exists(os.path.join(ROOT, path)), link)
 
     def test_example_configs_load_and_validate(self):
         examples = os.path.join(ROOT, "examples")
