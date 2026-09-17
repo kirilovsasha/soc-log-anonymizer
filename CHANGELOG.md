@@ -5,6 +5,7 @@
 - GUI: removed the dedicated Allowlist list/text editor; exceptions are edited
   only in the main JSON config (`"allowlist"`), which also accepts a plain
   text block (newlines and/or commas) in addition to a string array.
+- GUI: «Очистить всё» is on the main toolbar; removed from the «Ещё» menu.
 
 ## 2.4.0
 

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from .gui_constants import (
     FONT_UI,
+    ICON_CLEAR,
     ICON_COPY,
     ICON_DICE,
     ICON_DIFF,
