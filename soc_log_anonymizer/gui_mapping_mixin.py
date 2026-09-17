@@ -159,11 +159,34 @@ class GuiMappingMixin:
             tw.attributes("-topmost", True)
         except tk.TclError:
             pass
-        tw.wm_geometry(f"+{x + 14}+{y + 14}")
+        # Place off-screen first so we can measure without a flash at a bad spot.
+        tw.wm_geometry("+-10000+-10000")
         lbl = tk.Label(tw, text=text, background=p["surface"], foreground=p["text"],
                        relief=tk.SOLID, borderwidth=1, font=(FONT_UI, 9),
                        wraplength=420, justify=tk.LEFT, padx=8, pady=6)
         lbl.pack()
+        tw.update_idletasks()
+
+        tip_w = tw.winfo_reqwidth()
+        tip_h = tw.winfo_reqheight()
+        screen_w = tw.winfo_screenwidth()
+        screen_h = tw.winfo_screenheight()
+        margin = 8
+        offset = 14
+
+        pos_x = x + offset
+        if pos_x + tip_w > screen_w - margin:
+            pos_x = x - tip_w - offset
+        if pos_x < margin:
+            pos_x = max(margin, screen_w - tip_w - margin)
+
+        pos_y = y + offset
+        if pos_y + tip_h > screen_h - margin:
+            pos_y = y - tip_h - offset
+        if pos_y < margin:
+            pos_y = max(margin, screen_h - tip_h - margin)
+
+        tw.wm_geometry(f"+{pos_x}+{pos_y}")
         self._tooltip_window = tw
 
 
