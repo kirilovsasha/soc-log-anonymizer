@@ -57,34 +57,57 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
     # Same widget: processing disables both open entry points together.
     app.btn_open = open_btn
     app.btn_open_folder = open_btn
+    app._attach_tooltip_text(open_btn, "Открыть файл или папку с логами")
 
     app.btn_process = ttk.Button(
         left, text=f"{ICON_RUN}  Анонимизировать", style="Primary.TButton",
         command=app.start_processing_thread,
     )
     app.btn_process.pack(side=tk.LEFT, padx=(0, 6))
+    app._attach_tooltip_text(
+        app.btn_process,
+        app._action_tooltip("start_processing_thread", "Анонимизировать текст из левого окна"),
+    )
 
-    ttk.Button(
+    app.btn_copy = ttk.Button(
         left, text=f"{ICON_COPY}  Копировать", style="Ghost.TButton",
         command=app.copy_result,
-    ).pack(side=tk.LEFT, padx=(0, 6))
+    )
+    app.btn_copy.pack(side=tk.LEFT, padx=(0, 6))
+    app._attach_tooltip_text(
+        app.btn_copy,
+        app._action_tooltip("copy_result", "Скопировать результат в буфер обмена"),
+    )
 
-    ttk.Button(
+    app.btn_clear = ttk.Button(
         left, text=f"{ICON_CLEAR}  Очистить всё", style="Ghost.TButton",
         command=app.clear_all,
-    ).pack(side=tk.LEFT, padx=(0, 6))
+    )
+    app.btn_clear.pack(side=tk.LEFT, padx=(0, 6))
+    app._attach_tooltip_text(
+        app.btn_clear,
+        app._action_tooltip("clear_all", "Очистить оба окна и таблицу соответствия"),
+    )
 
     app.btn_cancel = ttk.Button(
         left, text="Отменить", style="Danger.TButton",
         command=app.cancel_operation, state=tk.DISABLED,
     )
     app.btn_cancel.pack(side=tk.LEFT, padx=(0, 4))
+    app._attach_tooltip_text(
+        app.btn_cancel,
+        app._action_tooltip("cancel_operation", "Отменить текущую обработку"),
+    )
 
     app.btn_undo = ttk.Button(
         left, text=f"{ICON_UNDO}", style="IconGhost.TButton", width=3,
         command=app.undo_last, state=tk.DISABLED,
     )
     app.btn_undo.pack(side=tk.LEFT)
+    app._attach_tooltip_text(
+        app.btn_undo,
+        app._action_tooltip("undo_last", "Отменить последнюю операцию анонимизации"),
+    )
 
     right = ttk.Frame(bar, style="Card.TFrame")
     right.pack(side=tk.RIGHT)
@@ -99,11 +122,17 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
     more["menu"] = more_menu
     more.pack(side=tk.LEFT, padx=(0, 6))
     app.btn_deanonymize = more
+    app._attach_tooltip_text(
+        more,
+        "Дополнительно: сохранить результат, деанонимизировать, HTML Diff, статистика",
+    )
 
-    ttk.Button(
+    app.btn_theme = ttk.Button(
         right, text=ICON_MOON, style="IconGhost.TButton", width=3,
         command=app._toggle_dark_mode,
-    ).pack(side=tk.LEFT)
+    )
+    app.btn_theme.pack(side=tk.LEFT)
+    app._attach_tooltip_text(app.btn_theme, "Переключить светлую / тёмную тему")
 
     # --- Status ---
     status_bar = ttk.Frame(main, style="StatusBar.TFrame")

@@ -6,6 +6,7 @@
   only in the main JSON config (`"allowlist"`), which also accepts a plain
   text block (newlines and/or commas) in addition to a string array.
 - GUI: «Очистить всё» is on the main toolbar; removed from the «Ещё» menu.
+- GUI: hover tooltips on main toolbar buttons (with hotkeys where available).
 
 ## 2.4.0
 
