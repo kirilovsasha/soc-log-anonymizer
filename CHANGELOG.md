@@ -4,9 +4,6 @@
 
 - Документация: [docs/RUNBOOK.md](docs/RUNBOOK.md) — одностраничный
   runbook для SOC (GUI/CLI, salt/mapping, чеклист перед LLM).
-- GUI (Windows): файлы и папки можно перетащить из Проводника на окно
-  (`WM_DROPFILES`, без tkdnd).
-- `.evtx` открывается через штатный `wevtutil qe` (GUI и CLI; только Windows).
 
 ## 2.5.0
 

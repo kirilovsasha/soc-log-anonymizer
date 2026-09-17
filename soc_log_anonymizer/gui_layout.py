@@ -62,10 +62,7 @@ def build_main_ui(app: "AnonymizerGUI") -> None:
     # Same widget: processing disables both open entry points together.
     app.btn_open = open_btn
     app.btn_open_folder = open_btn
-    app._attach_tooltip_text(
-        open_btn,
-        "Открыть файл или папку с логами (на Windows можно перетащить, в т.ч. .evtx)",
-    )
+    app._attach_tooltip_text(open_btn, "Открыть файл или папку с логами")
 
     app.btn_process = ttk.Button(
         left, text=f"{ICON_RUN}  Анонимизировать", style="Primary.TButton",

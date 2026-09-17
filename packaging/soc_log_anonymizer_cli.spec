@@ -21,7 +21,6 @@ a = Analysis(
         "soc_log_anonymizer.structured",
         "soc_log_anonymizer.paths",
         "soc_log_anonymizer.winsec",
-        "soc_log_anonymizer.evtx",
     ],
     hookspath=[],
     hooksconfig={},

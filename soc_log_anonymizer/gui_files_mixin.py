@@ -9,10 +9,9 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Iterable, Optional, Tuple
 
 from .gui_constants import FONT_MONO, GUI_DISPLAY_CHAR_LIMIT, GUI_SIDECAR_AUTO_MB
-from .gui_dnd import enable_windows_file_drop
-from .gui_logic import expand_dropped_paths, format_size_warning, truncate_display_text
+from .gui_logic import format_size_warning, truncate_display_text
 from .gui_theme import HIGHLIGHT_TAG_NAMES
-from .io_utils import format_size_mb, read_log_file
+from .io_utils import format_size_mb, read_file_auto_encoding
 
 logger = logging.getLogger("soc_log_anonymizer")
 
@@ -263,38 +262,11 @@ class GuiFilesMixin:
 
     def open_file(self):
         file_paths = filedialog.askopenfilenames(
-            filetypes=[
-                ("Log files", "*.log *.txt *.json *.cef *.xml *.gz *.evtx"),
-                ("Windows Event Log", "*.evtx"),
-                ("All files", "*.*"),
-            ]
+            filetypes=[("Log files", "*.log *.txt *.json *.cef *.xml *.gz"), ("All files", "*.*")]
         )
         if not file_paths:
             return
         self._load_selected_files(tuple(file_paths))
-
-    def _install_windows_file_drop(self) -> None:
-        try:
-            self.root.update_idletasks()
-        except tk.TclError:
-            return
-        if enable_windows_file_drop(self.root, self._on_files_dropped):
-            logger.info("Windows drag-and-drop файлов включён")
-
-    def _on_files_dropped(self, paths: Tuple[str, ...]) -> None:
-        try:
-            if str(self.btn_open.cget("state")) == str(tk.DISABLED):
-                return
-        except tk.TclError:
-            return
-        expanded = tuple(expand_dropped_paths(paths))
-        if not expanded:
-            messagebox.showwarning(
-                "Пустой перенос",
-                "Не удалось открыть перетащенные файлы или папка пуста.",
-            )
-            return
-        self._load_selected_files(expanded)
 
 
     def open_folder(self):
@@ -366,7 +338,7 @@ class GuiFilesMixin:
             if self._cancel_event.is_set():
                 break
             try:
-                contents.append(read_log_file(file_path))
+                contents.append(read_file_auto_encoding(file_path))
                 loaded.append(file_path)
             except (OSError, UnicodeError, ValueError) as exc:
                 errors.append(f"{os.path.basename(file_path)}: {exc}")
@@ -456,7 +428,7 @@ class GuiFilesMixin:
         parts = []
         for path in self._loaded_files:
             try:
-                parts.append(read_log_file(path))
+                parts.append(read_file_auto_encoding(path))
             except (OSError, UnicodeError, ValueError):
                 continue
         self._set_widget_content(self.txt_input, "\n" + ("-" * 72) + "\n".join(parts)

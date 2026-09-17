@@ -2,7 +2,6 @@
 GUI logic kept free from tkinter imports so it can be unit-tested in headless CI.
 """
 
-import os
 import re
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -39,34 +38,6 @@ def compute_progress_pct(done: int, total: int) -> int:
 def status_style_name(kind: str) -> str:
     """Return a ttk style name for a status kind."""
     return f"Status{kind.capitalize()}.TLabel"
-
-
-def expand_dropped_paths(paths: Iterable[str]) -> List[str]:
-    """Файлы как есть; каталоги — непосредственные файлы (как «Открыть папку»)."""
-    result: List[str] = []
-    seen = set()
-    for raw in paths:
-        if not raw:
-            continue
-        path = os.path.normpath(raw)
-        if path in seen:
-            continue
-        if os.path.isfile(path):
-            seen.add(path)
-            result.append(path)
-            continue
-        if not os.path.isdir(path):
-            continue
-        try:
-            names = sorted(os.listdir(path))
-        except OSError:
-            continue
-        for name in names:
-            full = os.path.join(path, name)
-            if os.path.isfile(full) and full not in seen:
-                seen.add(full)
-                result.append(full)
-    return result
 
 
 def format_size_warning(size_mb: float, limit_mb: int) -> str:
@@ -416,7 +387,7 @@ def _spans_for_lines(text: str, line_numbers: Iterable[int]) -> List[Tuple[int, 
 
 HOTKEYS: List[Tuple[str, str, str]] = [
     # (accelerator для меню, имя метода GUI, описание для справки)
-    ("Ctrl+O", "open_file", "Открыть файл лога (на Windows можно перетащить с Проводника)"),
+    ("Ctrl+O", "open_file", "Открыть файл лога"),
     ("Ctrl+S", "save_file", "Сохранить результат"),
     ("Ctrl+Shift+C", "copy_result", "Скопировать результат в буфер обмена"),
     ("Ctrl+Enter", "start_processing_thread", "Анонимизировать"),

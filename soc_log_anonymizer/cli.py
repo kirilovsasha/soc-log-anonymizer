@@ -79,9 +79,8 @@ from .io_utils import (
     check_world_readable,
     format_size_mb,
     is_gzip_file,
-    iter_log_lines,
+    iter_lines_stream,
     read_file_auto_encoding,
-    read_log_file,
     restrict_sensitive_file,
 )
 from .parallel_merge import (
@@ -471,7 +470,7 @@ def cmd_anonymize(args: argparse.Namespace) -> int:
                 # Параллельный построчный режим требует список строк для
                 # деления на чанки — здесь экономия памяти недостижима,
                 # но так параллелизм остаётся доступным и для больших файлов.
-                raw_text = read_log_file(args.input)
+                raw_text = read_file_auto_encoding(args.input)
                 lines = raw_text.splitlines(keepends=True)
                 out_lines = _run_with_profiling(
                     anonymizer.anonymize_parallel_lines, args, lines, workers=args.workers)
@@ -492,11 +491,10 @@ def cmd_anonymize(args: argparse.Namespace) -> int:
                 # объём памяти вне зависимости от размера файла: mmap
                 # (--mmap), gzip-поток (файл определяется автоматически по
                 # магическим байтам) либо обычное ленивое построчное чтение
-                # — выбор стратегии инкапсулирован в iter_log_lines()
-                # (.evtx конвертируется через wevtutil, затем читается как текст).
+                # — выбор стратегии инкапсулирован в iter_lines_stream().
                 def _process():
                     for line in anonymizer.anonymize_stream(
-                            iter_log_lines(args.input, use_mmap=getattr(args, "use_mmap", False))):
+                            iter_lines_stream(args.input, use_mmap=getattr(args, "use_mmap", False))):
                         out_stream.write(line)
                 _run_with_profiling(_process, args)
             cleaned_text = None  # verify()/diff пропускаются в --stream для очень больших файлов
@@ -505,7 +503,7 @@ def cmd_anonymize(args: argparse.Namespace) -> int:
                 raw_text = sys.stdin.read()
             else:
                 _check_input_size(args.input, config)
-                raw_text = read_log_file(args.input)
+                raw_text = read_file_auto_encoding(args.input)
             cleaned_text = _run_with_profiling(anonymizer.anonymize, args, raw_text)
             if args.output in (None, "-"):
                 sys.stdout.write(cleaned_text)
@@ -573,7 +571,7 @@ def _run_multi_file(args: argparse.Namespace, anonymizer: SOCLogAnonymizer) -> i
     for file_path in expanded:
         try:
             _check_input_size(file_path, anonymizer.config)
-            raw_text = read_log_file(file_path)
+            raw_text = read_file_auto_encoding(file_path)
             cleaned_text = anonymizer.anonymize(raw_text)
         except (OSError, UnicodeError, ValueError) as exc:
             logger.error("Не удалось обработать %s: %s", file_path, exc)
@@ -649,7 +647,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
     for path in expanded:
         try:
             if args.stream:
-                for line_no, line in enumerate(iter_log_lines(path), 1):
+                for line_no, line in enumerate(iter_lines_stream(path), 1):
                     line_anonymizer = SOCLogAnonymizer(salt=anonymizer.salt,
                                                        org_name=args.org, config=config)
                     started = time.perf_counter()
@@ -667,7 +665,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
                         reports.append(item)
                     line_anonymizer.clear_sensitive_data()
                 continue
-            source = read_log_file(path)
+            source = read_file_auto_encoding(path)
             started = time.perf_counter()
             cleaned = anonymizer.anonymize(source)
             elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
@@ -781,7 +779,7 @@ def cmd_batch(args: argparse.Namespace) -> int:
         reports = []
         for full_path, rel_path in file_list:
             try:
-                text = read_log_file(full_path)
+                text = read_file_auto_encoding(full_path)
                 analyzer = SOCLogAnonymizer(salt=anonymizer.salt, org_name=args.org,
                                            config=config)
                 cleaned = analyzer.anonymize(text)
@@ -866,7 +864,7 @@ def _batch_verify_all(anonymizer: SOCLogAnonymizer, file_list, output_dir: str) 
 
 def _process_one_batch_file(anonymizer: SOCLogAnonymizer, full_path: str, rel_path: str, output_dir: str) -> None:
     _check_input_size(full_path, anonymizer.config)
-    raw_text = read_log_file(full_path)
+    raw_text = read_file_auto_encoding(full_path)
     cleaned_text = anonymizer.anonymize(raw_text)
     out_path = _output_path_for(full_path, rel_path, output_dir)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
@@ -919,7 +917,7 @@ def _batch_worker(task):
     full_path, rel_path, salt, hmac_key, config_dict, output_dir = task
     config = AnonymizerConfig(**config_dict)
     local = SOCLogAnonymizer(salt=salt, config=config, _prederived_key=hmac_key)
-    raw_text = read_log_file(full_path)
+    raw_text = read_file_auto_encoding(full_path)
     cleaned_text = local.anonymize(raw_text)
     out_path = _output_path_for(full_path, rel_path, output_dir)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
