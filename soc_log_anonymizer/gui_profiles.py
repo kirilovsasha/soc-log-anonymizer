@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, List
 
+from .config import coerce_text_list
+
 
 def _uniq(values: Iterable[str]) -> List[str]:
     seen = set()
@@ -45,11 +47,7 @@ def allowlist_from_presets(preset_ids: Iterable[str]) -> List[str]:
 
 def parse_allowlist_lines(text: str) -> List[str]:
     """One value per line; commas also split for convenience."""
-    values: List[str] = []
-    for line in (text or "").splitlines():
-        for part in line.split(","):
-            values.append(part)
-    return _uniq(values)
+    return _uniq(coerce_text_list(text))
 
 
 def format_allowlist_lines(values: Iterable[str]) -> str:

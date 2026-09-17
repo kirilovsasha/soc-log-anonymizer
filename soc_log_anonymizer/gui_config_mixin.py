@@ -12,7 +12,6 @@ from typing import Optional
 from .config import AnonymizerConfig
 from .gui_constants import ICON_TAB_CONFIG, ICON_WARN
 from .gui_logic import salt_entropy_warning
-from .gui_profiles import format_allowlist_lines, parse_allowlist_lines
 from .paths import app_dir
 
 logger = logging.getLogger("soc_log_anonymizer")
@@ -46,7 +45,6 @@ class GuiConfigMixin:
             )
         self.txt_config.delete("1.0", tk.END)
         self.txt_config.insert(tk.END, json.dumps(self.config.as_dict(), ensure_ascii=False, indent=2))
-        self._refresh_allowlist_widget()
 
 
     def _parse_config_editor(self) -> Optional[AnonymizerConfig]:
@@ -65,10 +63,6 @@ class GuiConfigMixin:
             messagebox.showerror("Некорректный JSON", "Верхний уровень конфигурации должен быть JSON-объектом ({...}).")
             return None
         try:
-            if hasattr(self, "txt_allowlist"):
-                data["allowlist"] = parse_allowlist_lines(
-                    self.txt_allowlist.get("1.0", tk.END)
-                )
             return AnonymizerConfig.from_dict(data)
         except (TypeError, ValueError) as e:
             messagebox.showerror("Некорректная конфигурация", f"Не удалось построить конфигурацию из JSON:\n{e}")
@@ -176,31 +170,6 @@ class GuiConfigMixin:
         defaults = AnonymizerConfig()
         self.txt_config.delete("1.0", tk.END)
         self.txt_config.insert(tk.END, json.dumps(defaults.as_dict(), ensure_ascii=False, indent=2))
-        if hasattr(self, "txt_allowlist"):
-            self.txt_allowlist.delete("1.0", tk.END)
-            self.txt_allowlist.insert(tk.END, format_allowlist_lines(defaults.allowlist))
-
-
-    def _refresh_allowlist_widget(self) -> None:
-        if not hasattr(self, "txt_allowlist"):
-            return
-        self.txt_allowlist.delete("1.0", tk.END)
-        self.txt_allowlist.insert(tk.END, format_allowlist_lines(self.config.allowlist))
-
-
-    def _patch_config_editor_allowlist(self) -> None:
-        """Keep advanced JSON in sync with the allowlist text section."""
-        if not hasattr(self, "txt_config") or not hasattr(self, "txt_allowlist"):
-            return
-        try:
-            data = json.loads(self.txt_config.get("1.0", tk.END))
-        except json.JSONDecodeError:
-            return
-        if not isinstance(data, dict):
-            return
-        data["allowlist"] = parse_allowlist_lines(self.txt_allowlist.get("1.0", tk.END))
-        self.txt_config.delete("1.0", tk.END)
-        self.txt_config.insert(tk.END, json.dumps(data, ensure_ascii=False, indent=2))
 
 
     def load_config_file(self):

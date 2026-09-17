@@ -217,6 +217,14 @@ class TestConfig(unittest.TestCase):
         self.assertNotIn("jdoe", out)
         self.assertNotIn("secret", out)
 
+    def test_allowlist_accepts_text_block_in_main_config(self):
+        cfg = AnonymizerConfig.from_dict({
+            "allowlist": "8.8.8.8\nAdministrator, SYSTEM\n8.8.8.8",
+        })
+        self.assertEqual(cfg.allowlist, ["8.8.8.8", "Administrator", "SYSTEM"])
+        cfg_list = AnonymizerConfig.from_dict({"allowlist": ["8.8.8.8", " admin "]})
+        self.assertEqual(cfg_list.allowlist, ["8.8.8.8", "admin"])
+
     def test_mapping_contains_algorithm_metadata_and_loads(self):
         a = SOCLogAnonymizer(salt="test-salt")
         a.anonymize("user=jdoe")

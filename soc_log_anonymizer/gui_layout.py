@@ -8,7 +8,6 @@ from tkinter import ttk
 from typing import TYPE_CHECKING
 
 from .gui_constants import (
-    FONT_MONO,
     FONT_UI,
     ICON_COPY,
     ICON_DICE,
@@ -326,44 +325,9 @@ def _build_config_tab(app: "AnonymizerGUI", tab_config: ttk.Frame) -> None:
         command=app.generate_new_salt,
     ).pack(side=tk.LEFT)
 
-    # Allowlist: plain-text exceptions (one value per line)
-    allow_outer, allow_card = app._card(tab_config)
-    allow_outer.pack(fill=tk.X, padx=8, pady=(0, 6))
-    allow_header = ttk.Frame(allow_card, style="Card.TFrame")
-    allow_header.pack(fill=tk.X, padx=12, pady=(10, 4))
-    ttk.Label(allow_header, text="Исключения (allowlist)", style="Section.TLabel").pack(
-        side=tk.LEFT
-    )
+    # Main application config (JSON) — allowlist exceptions live here as "allowlist"
     ttk.Label(
-        allow_header,
-        text="Не маскировать: по одному значению на строку (IP, логины…). Сохраняются в конфиг.",
-        style="Muted.TLabel",
-    ).pack(side=tk.LEFT, padx=12)
-
-    allow_body = ttk.Frame(allow_card, style="Card.TFrame")
-    allow_body.pack(fill=tk.X, padx=12, pady=(0, 10))
-    allow_scroll = ttk.Scrollbar(allow_body, orient=tk.VERTICAL)
-    allow_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-    app.txt_allowlist = tk.Text(
-        allow_body,
-        height=6,
-        wrap=tk.NONE,
-        font=(FONT_MONO, 9),
-        undo=True,
-        relief=tk.FLAT,
-        borderwidth=0,
-        highlightthickness=0,
-        padx=8,
-        pady=6,
-        yscrollcommand=allow_scroll.set,
-    )
-    app.txt_allowlist.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-    allow_scroll.config(command=app.txt_allowlist.yview)
-    app.txt_allowlist.bind("<FocusOut>", lambda e: app._patch_config_editor_allowlist())
-
-    # Advanced JSON
-    ttk.Label(
-        tab_config, text="Расширенный JSON", style="Muted.TLabel"
+        tab_config, text="Конфигурация JSON", style="Muted.TLabel"
     ).pack(anchor="w", padx=12, pady=(0, 2))
     config_outer, config_card = app._card(tab_config)
     config_outer.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
