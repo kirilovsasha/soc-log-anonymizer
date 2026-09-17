@@ -192,11 +192,39 @@ def _default_sensitive_json_keys() -> List[str]:
         "card_number", "accountnumber", "account_number", "personalnumber",
         "personal_number", "passport", "passportnumber", "mobile", "msisdn",
         "accountname", "src_user_name", "dst_user_name", "user.name",
+        # MaxPatrol 10 / PT SIEM taxonomy (nested → flat path OR dotted export keys)
+        *_MAXPATROL10_JSON_KEYS,
     ]
 
 
+# MaxPatrol SIEM / MP10 event schema — sensitive identifiers only (not action/status/…).
+# Listed in both dotted and flat spellings so exports like {"event_src.host": "…"}
+# and nested {"event_src": {"host": "…"}} hit the same config entries after normalize.
+_MAXPATROL10_JSON_KEYS: List[str] = [
+    # Subject / object accounts
+    "subject.account.name", "subject.account.id", "subject.account.domain",
+    "subject.account.session_id", "subject.account.privileges",
+    "object.account.name", "object.account.id", "object.account.domain",
+    "subject.name", "object.name", "subject.id", "object.id",
+    "subject.email", "object.email", "subject.phone", "object.phone",
+    # Network endpoints
+    "src.ip", "src.host", "src.hostname", "src.fqdn", "src.mac", "src.geo",
+    "dst.ip", "dst.host", "dst.hostname", "dst.fqdn", "dst.mac", "dst.geo",
+    "src.ip.v4", "src.ip.v6", "dst.ip.v4", "dst.ip.v6",
+    # Event source / collector
+    "event_src.ip", "event_src.host", "event_src.hostname", "event_src.fqdn",
+    "event_src.mac", "recv_ipv4", "recv_ipv6", "recv_host",
+    # Assets / identities often present on correlated events
+    "asset", "asset.name", "asset.fqdn", "asset.ip",
+    "logon_service", "external_id",
+    # Flat camel aliases sometimes used in custom packs
+    "SubjectAccountId", "ObjectAccountId", "SubjectAccountSessionId",
+    "EventSrcHost", "EventSrcIp", "RecvIpv4", "RecvIpv6",
+]
+
+
 def _default_key_type_hints() -> Dict[str, str]:
-    return {
+    hints = {
         "ip": "IP", "ipaddress": "IP", "srcip": "IP", "destip": "IP", "dstip": "IP",
         "sourceip": "IP", "destinationip": "IP", "clientip": "IP",
         "calleripaddress": "IP", "sourceipaddress": "IP", "ipaddressorproxy": "IP",
@@ -222,7 +250,31 @@ def _default_key_type_hints() -> Dict[str, str]:
         "personalnumber": "BY_ID", "personal_number": "BY_ID",
         "passport": "BY_ID", "passportnumber": "BY_ID",
         "accountnumber": "SECRET", "account_number": "SECRET",
+        # MaxPatrol 10
+        "subject.account.name": "USER", "object.account.name": "USER",
+        "subject.account.id": "USER", "object.account.id": "USER",
+        "subject.account.domain": "USER", "object.account.domain": "USER",
+        "subject.account.session_id": "USER", "subject.account.privileges": "USER",
+        "subject.name": "USER", "object.name": "USER",
+        "subject.id": "USER", "object.id": "USER",
+        "subject.email": "EMAIL", "object.email": "EMAIL",
+        "subject.phone": "PHONE", "object.phone": "PHONE",
+        "src.ip": "IP", "dst.ip": "IP", "src.ip.v4": "IP", "src.ip.v6": "IP",
+        "dst.ip.v4": "IP", "dst.ip.v6": "IP",
+        "event_src.ip": "IP", "recv_ipv4": "IP", "recv_ipv6": "IP", "asset.ip": "IP",
+        "src.host": "FQDN", "dst.host": "FQDN", "src.hostname": "FQDN", "dst.hostname": "FQDN",
+        "src.fqdn": "FQDN", "dst.fqdn": "FQDN",
+        "event_src.host": "FQDN", "event_src.hostname": "FQDN", "event_src.fqdn": "FQDN",
+        "recv_host": "FQDN", "asset": "FQDN", "asset.name": "FQDN", "asset.fqdn": "FQDN",
+        "src.mac": "MAC", "dst.mac": "MAC", "event_src.mac": "MAC",
+        "logon_service": "VALUE", "external_id": "VALUE",
+        "SubjectAccountId": "USER", "ObjectAccountId": "USER",
+        "SubjectAccountSessionId": "USER",
+        "EventSrcHost": "FQDN", "EventSrcIp": "IP",
+        "RecvIpv4": "IP", "RecvIpv6": "IP",
     }
+    return hints
+
 
 
 def _default_well_known_sids() -> List[str]:
@@ -300,6 +352,10 @@ def _default_user_field_names() -> List[str]:
         "usr", "xauth_user", "srcname", "dstname",
         # Elastic / Windows Event text
         "user.name", "src_user_name", "dst_user_name", "account_name",
+        # MaxPatrol 10 dotted fields in free-text / KV exports
+        "subject.account.name", "object.account.name",
+        "subject.account.id", "object.account.id",
+        "event_src.host", "event_src.ip",
     ]
 
 

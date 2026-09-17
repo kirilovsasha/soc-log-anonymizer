@@ -82,6 +82,10 @@
   нормализованных событий SIEM (**MaxPatrol 10** и подобные): один и тот
   же список `sensitive_json_keys` работает и для плоских ключей
   (`SubjectAccountName`), и для вложенных путей (`subject.account.name`).
+  В дефолте также покрыты поля таксономии **MaxPatrol 10 / PT SIEM**:
+  `event_src.host`/`event_src.ip`, `recv_ipv4`, `src`/`dst` (ip/host/mac),
+  `subject`/`object` (account/email/phone), `asset.*` — и в nested JSON, и
+  в плоском экспорте API с точечными ключами.
 - 🔁 Одно и то же значение везде получает один и тот же псевдоним
   (см. [ниже](#pseudonymization)).
 - 🔑 **HMAC-SHA256 с ключом, растянутым через PBKDF2** (см.

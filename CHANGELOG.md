@@ -14,6 +14,9 @@
   Windows `Account Name:`.
 - Packaging `default_config.json` tuned for Belarus Windows EXE deployments.
 - Golden corpus + `tests/test_quality_v25.py`.
+- MaxPatrol 10 / PT SIEM taxonomy keys in defaults (`event_src.host`,
+  `subject.account.*`, `recv_ipv4`, assets, MAC/email/phone on subject/object);
+  sample `examples/maxpatrol10_event.json`.
 - GUI: removed the dedicated Allowlist list/text editor; exceptions are edited
   only in the main JSON config (`"allowlist"`), which also accepts a plain
   text block (newlines and/or commas) in addition to a string array.

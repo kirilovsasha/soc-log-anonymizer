@@ -1051,12 +1051,14 @@ class SOCLogAnonymizer:
                 elif matched_key and isinstance(val, str) and val:
                     tag = self._classify_value(val)
                     if tag == "VALUE":
+                        needle = self._normalize_json_key(matched_key)
                         tag = next(
                             (
                                 hint
                                 for configured_key, hint in self.config.key_type_hints.items()
-                                if self._normalize_json_key(configured_key)
-                                == self._normalize_json_key(matched_key)
+                                if self._normalize_json_key(configured_key) in (
+                                    needle, full_path, clean_key
+                                )
                             ),
                             "SENSITIVE",
                         )
