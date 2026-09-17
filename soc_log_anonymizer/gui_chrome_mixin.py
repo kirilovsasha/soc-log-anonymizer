@@ -257,6 +257,12 @@ class GuiChromeMixin:
         return ""
 
 
+    def _action_tooltip(self, method_name: str, description: str) -> str:
+        """Текст hover-подсказки: описание + горячая клавиша из HOTKEYS."""
+        accel = self._accelerator_for(method_name)
+        return f"{description} ({accel})" if accel else description
+
+
     def _palette(self) -> dict:
         return PALETTE_DARK if self.dark_mode.get() else PALETTE_LIGHT
 
