@@ -25,13 +25,24 @@
     "S-1-5-32-551"
   ],
   "nil_guid": "00000000-0000-0000-0000-000000000000",
-  "phone_prefixes": ["+375", "+7", "+1", "+44"],
-  "fqdn_tlds": ["com", "net", "org", "local", "internal", "corp"],
+  "phone_prefixes": [
+    "+375", "375", "8029", "8033", "8044", "8025", "8017",
+    "+7", "+380", "+48", "+1", "+44"
+  ],
+  "fqdn_tlds": ["by", "com", "net", "org", "local", "internal", "corp"],
   "cef_fields": ["src", "dst", "suser", "duser", "cs1", "cs2", "cs3", "cs4", "shost", "dhost"],
   "session_timeout_minutes": 15,
   "allowlist": ["8.8.8.8"],
   "hash_require_context": true,
   "json_preserve_formatting": true,
   "multiline_join": true,
-  "parse_structured": true
+  "parse_structured": true,
+  "residual_scan": true,
+  "mask_strategies": {
+    "PHONE": "partial",
+    "PAN": "partial",
+    "IBAN": "partial",
+    "UNP": "full",
+    "BY_ID": "partial"
+  }
 }

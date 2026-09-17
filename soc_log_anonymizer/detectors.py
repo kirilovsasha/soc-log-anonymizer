@@ -14,6 +14,7 @@ from collections.abc import Iterable
 MASKABLE_FAMILIES = (
     "IP", "EMAIL", "USER", "FQDN", "ORG", "SID", "UUID", "MAC", "PHONE",
     "HASH", "JWT", "SECRET", "URL", "TOKEN",
+    "UNP", "PAN", "IBAN", "BY_ID",
 )
 
 TAG_FAMILY: dict[str, str] = {
@@ -25,6 +26,8 @@ TAG_FAMILY: dict[str, str] = {
     "AUTH_USER": "USER",
     "AUTH_USER_CISCO": "USER",
     "AUTH_USER_SU_FROM": "USER",
+    "AUTH_USER_SUDO": "USER",
+    "AUTH_USER_WIN": "USER",
     "USER_PATH": "USER",
     "FQDN": "FQDN",
     "ORG": "ORG",
@@ -44,12 +47,17 @@ TAG_FAMILY: dict[str, str] = {
     "URL": "URL",
     "CEF_KV": "CEF_KV",
     "SENSITIVE": "SECRET",
+    "UNP": "UNP",
+    "PAN": "PAN",
+    "CARD": "PAN",
+    "IBAN": "IBAN",
+    "BY_ID": "BY_ID",
 }
 
 # Extractor tags always applied (values still filtered in _hash_val).
 STRUCTURAL_TAGS = frozenset({
     "CEF_KV", "SECRET", "USER_FIELD", "AUTH_USER", "AUTH_USER_CISCO",
-    "AUTH_USER_SU_FROM", "USER_PATH", "BASE64_CMD",
+    "AUTH_USER_SU_FROM", "AUTH_USER_SUDO", "AUTH_USER_WIN", "USER_PATH", "BASE64_CMD",
 })
 
 DEFAULT_FQDN_STOPWORDS = frozenset({

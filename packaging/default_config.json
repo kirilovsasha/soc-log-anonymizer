@@ -1,37 +1,38 @@
 {
-  "org_name": "acme-corp",
+  "org_name": "bank",
+  "config_version": 1,
   "hash_len": 12,
   "max_token_len": 500,
-  "sensitive_json_keys": [
-    "user", "username", "login", "account", "subjectaccountname", "targetusername",
-    "ip", "ipaddress", "src_ip", "dest_ip", "sourceip", "destinationip", "client_ip",
-    "password", "passwd", "secret", "token", "api_key", "apikey", "authorization",
-    "email", "phone", "domain", "computername", "host", "hostname",
-    "employee_id", "badge_number"
-  ],
-  "key_type_hints": {
-    "employee_id": "USER",
-    "badge_number": "USER"
+  "max_input_size_mb": 500,
+  "pbkdf2_iterations": 600000,
+  "regex_timeout_seconds": 5.0,
+  "org_aliases": [],
+  "org_aliases_share_pseudonym": true,
+  "residual_scan": true,
+  "residual_min_digit_run": 12,
+  "mask_strategies": {
+    "PHONE": "partial",
+    "PAN": "partial",
+    "CARD": "partial",
+    "IBAN": "partial",
+    "UNP": "full",
+    "BY_ID": "partial"
   },
-  "well_known_sids": [
-    "S-1-1-0",
-    "S-1-5-18",
-    "S-1-5-19",
-    "S-1-5-20",
-    "S-1-5-32-544",
-    "S-1-5-32-545",
-    "S-1-5-32-546",
-    "S-1-5-32-547",
-    "S-1-5-32-551"
+  "phone_prefixes": [
+    "+375", "375",
+    "8029", "8033", "8044", "8025", "8017",
+    "+7", "+380", "+48", "+370", "+371", "+372", "+1", "+44"
   ],
-  "nil_guid": "00000000-0000-0000-0000-000000000000",
-  "phone_prefixes": ["+375", "+7", "+1", "+44"],
-  "fqdn_tlds": ["com", "net", "org", "local", "internal", "corp"],
-  "cef_fields": ["src", "dst", "suser", "duser", "cs1", "cs2", "cs3", "cs4", "shost", "dhost"],
-  "session_timeout_minutes": 15,
-  "allowlist": ["8.8.8.8"],
+  "fqdn_tlds": [
+    "by", "com", "ru", "org", "net", "lan", "corp", "local",
+    "internal", "gov", "io", "info", "edu", "mil", "biz", "co"
+  ],
+  "allowlist": ["8.8.8.8", "1.1.1.1"],
   "hash_require_context": true,
   "json_preserve_formatting": true,
   "multiline_join": true,
-  "parse_structured": true
+  "parse_structured": true,
+  "session_timeout_minutes": 15,
+  "custom_patterns": {},
+  "context_rules": []
 }

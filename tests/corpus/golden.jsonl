@@ -31,3 +31,13 @@
 {"id": "win-event-json", "input": "{\"EventID\":4624,\"TargetUserName\":\"jdoe\",\"IpAddress\":\"10.0.0.9\",\"WorkstationName\":\"PC01.bank.local\"}", "must_keep": ["\"EventID\": 4624"], "must_not_contain": ["jdoe", "10.0.0.9", "PC01.bank.local"]}
 {"id": "pretty-json-stream", "input": "{\n  \"user\": \"alice\",\n  \"ip\": \"10.0.0.5\"\n}", "must_keep": [], "must_not_contain": ["alice", "10.0.0.5"]}
 {"id": "invalid-password-fp", "input": "Invalid password entered by operator", "must_keep": ["Invalid password"], "must_not_contain": ["[SECRET_"]}
+{"id": "by-unp", "input": "taxpayer UNP 200988541 filed", "must_keep": ["taxpayer", "filed"], "must_not_contain": ["200988541"]}
+{"id": "by-pan", "input": "charge 4111111111111111 ok", "must_keep": ["charge"], "must_not_contain": ["4111111111111111"]}
+{"id": "by-iban", "input": "transfer BY13AKBB36120000000000000000 done", "must_keep": ["transfer", "done"], "must_not_contain": ["AKBB36120000000000000000"]}
+{"id": "by-id", "input": "citizen 3011089A001PB1 checked", "must_keep": ["citizen", "checked"], "must_not_contain": ["3011089A001PB1"]}
+{"id": "by-fqdn", "input": "resolve mail.bank.by", "must_keep": ["resolve"], "must_not_contain": ["mail.bank.by"]}
+{"id": "quoted-user", "input": "user=\"Alice Smith\" login ok", "must_keep": ["login ok"], "must_not_contain": ["Alice Smith"]}
+{"id": "sudo-user", "input": "sudo: alice : TTY=pts/0 ; USER=root", "must_keep": ["TTY=pts/0"], "must_not_contain": ["alice"]}
+{"id": "invalid-user", "input": "sshd: Invalid user bob from 10.0.0.5", "must_keep": ["sshd:", "Invalid user"], "must_not_contain": [" bob ", "10.0.0.5"]}
+{"id": "win-account-name", "input": "Account Name: jdoe Domain: CORP", "must_keep": ["Account Name:", "Domain:"], "must_not_contain": ["jdoe"]}
+{"id": "by-phone-local", "input": "sms 80291234567 sent", "must_keep": ["sms", "sent"], "must_not_contain": ["80291234567"]}

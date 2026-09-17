@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 2.5.0
+
+- Belarus-oriented PII: UNP (checksum), BY personal id, BY IBAN (mod-97),
+  PAN (Luhn); default phone prefixes `+375` / `80xx` and TLD `.by`.
+- `mask_strategies` config (default: partial for PHONE/PAN/IBAN/BY_ID).
+- Residual scan in `verify()` / `get_quality_report()` for leftovers beyond
+  the same regexes used to mask (`--fail-on-unsafe` benefits).
+- Quoted `key="value with spaces"` / `key='…'` for USER_FIELD and SECRET.
+- AUTH: `Invalid user`, `authentication failure for`, `sudo: user :`,
+  Windows `Account Name:`.
+- Packaging `default_config.json` tuned for Belarus Windows EXE deployments.
+- Golden corpus + `tests/test_quality_v25.py`.
 - GUI: removed the dedicated Allowlist list/text editor; exceptions are edited
   only in the main JSON config (`"allowlist"`), which also accepts a plain
   text block (newlines and/or commas) in addition to a string array.

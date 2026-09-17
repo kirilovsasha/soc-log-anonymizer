@@ -17,7 +17,13 @@ packaging\build_windows.bat
 В свойствах файла Windows: **версия**, описание и **иконка**.
 
 Рядом с exe можно положить `soc_log_anonymizer.json` (скрипт копирует
-образец в `dist\`).
+образец в `dist\`). Образец (`packaging/default_config.json`) заточен под
+**Республику Беларусь**: префиксы `+375`/`80xx`, TLD `by`, partial для
+телефонов/карт/IBAN, `residual_scan: true`. Перед отправкой в LLM в CLI:
+
+```bat
+soc-log-anonymizer-cli.exe anonymize -i raw.log -o clean.log --fail-on-unsafe --salt-file salt.txt --save-mapping map.json
+```
 
 ## Опционально: `--onedir` (папка, быстрее старт)
 
