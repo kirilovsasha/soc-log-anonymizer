@@ -23,7 +23,9 @@ __all__ = [
     "is_gzip_file",
     "iter_lines_mmap",
     "iter_lines_stream",
+    "iter_log_lines",
     "read_file_auto_encoding",
+    "read_log_file",
     "restrict_sensitive_file",
 ]
 
@@ -151,7 +153,8 @@ def read_file_auto_encoding(file_path: str) -> str:
     """Чтение файла ЦЕЛИКОМ с автоопределением кодировки. Прозрачно
     распаковывает gzip (по магическим байтам, не по расширению). Для
     больших файлов предпочтительнее detect_file_encoding() +
-    iter_lines_stream()."""
+    iter_lines_stream(). Бинарный .evtx сюда не стоит: используйте
+    read_log_file()."""
     with _open_binary(file_path) as f:
         raw = f.read()
     text = _normalize_newlines(_decode_bytes_auto(raw))
@@ -159,6 +162,16 @@ def read_file_auto_encoding(file_path: str) -> str:
         logger.warning("Файл %s содержит символы замены Unicode — возможна повреждённая кодировка.",
                        file_path)
     return text
+
+
+def read_log_file(file_path: str) -> str:
+    """Чтение входного лога: gzip/текст как read_file_auto_encoding,
+    Windows Event Log (.evtx) — через wevtutil (только Windows)."""
+    from .evtx import is_evtx_file, read_evtx_text
+
+    if is_evtx_file(file_path):
+        return read_evtx_text(file_path)
+    return read_file_auto_encoding(file_path)
 
 
 def detect_file_encoding(file_path: str, sample_size: int = 65536) -> str:
@@ -227,6 +240,21 @@ def iter_lines_stream(file_path: str, encoding: Optional[str] = None,
         encoding = detect_file_encoding(file_path)
     with open(file_path, 'r', encoding=encoding, errors='replace') as f:
         yield from f
+
+
+def iter_log_lines(file_path: str, encoding: Optional[str] = None,
+                   use_mmap: bool = False) -> Iterator[str]:
+    """Как iter_lines_stream, но .evtx сначала конвертируется целиком
+    через wevtutil (потокового разбора контейнера нет)."""
+    from .evtx import is_evtx_file, read_evtx_text
+
+    if is_evtx_file(file_path):
+        text = read_evtx_text(file_path)
+        if not text:
+            return
+        yield from text.splitlines(keepends=True)
+        return
+    yield from iter_lines_stream(file_path, encoding=encoding, use_mmap=use_mmap)
 
 
 def format_size_mb(size_bytes: int) -> float:

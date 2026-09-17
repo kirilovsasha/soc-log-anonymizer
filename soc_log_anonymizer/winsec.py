@@ -22,11 +22,15 @@ if sys.platform == "win32":
     _CREATE_NO_WINDOW = int(getattr(subprocess, "CREATE_NO_WINDOW", _CREATE_NO_WINDOW))
 
 
-def _windows_hidden_run_kwargs() -> Dict[str, Any]:
-    """Kwargs so console-subsystem tools (icacls) do not flash a cmd window."""
+def windows_hidden_run_kwargs() -> Dict[str, Any]:
+    """Kwargs so console-subsystem tools (icacls, wevtutil) do not flash a cmd window."""
     if sys.platform != "win32":
         return {}
     return {"creationflags": _CREATE_NO_WINDOW}
+
+
+# Backward-compatible alias used by older tests/patches.
+_windows_hidden_run_kwargs = windows_hidden_run_kwargs
 
 
 def restrict_sensitive_file(path: str) -> Optional[str]:

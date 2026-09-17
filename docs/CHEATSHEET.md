@@ -30,6 +30,7 @@ well-known SID, nil GUID, значения из `allowlist` в конфиге, �
 
 Windows EXE подхватывает `soc_log_anonymizer.json` рядом с exe (из
 `packaging/default_config.json` при сборке) — для РБ там уже `+375`/`80xx` и `.by`.
+На Windows в GUI можно перетащить файл с Проводника; `.evtx` идёт через `wevtutil`.
 
 Подробности: [FALSE_POSITIVES.md](FALSE_POSITIVES.md),
 [CUSTOM_PATTERNS.md](CUSTOM_PATTERNS.md),

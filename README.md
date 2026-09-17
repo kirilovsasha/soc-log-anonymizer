@@ -66,9 +66,9 @@ with SOCLogAnonymizer(salt="...", org_name="bank") as anon:
 - Консистентная HMAC-SHA256/PBKDF2 псевдонимизация IP/USER/EMAIL/HASH/JWT/…
 - Syslog, Cisco ASA/IOS, Checkpoint, Fortinet, Palo Alto, Azure/AWS, MaxPatrol 10
 - Идентификаторы РБ: УНП, личный номер, IBAN `BY…`, PAN (Luhn); телефоны `+375`/`80xx`
-- JSON/NDJSON (в т.ч. pretty-printed в `--stream`), gzip, batch, `--workers`
+- JSON/NDJSON (в т.ч. pretty-printed в `--stream`), gzip, `.evtx` (Windows/`wevtutil`), batch, `--workers`
 - Gatekeeper `verify()` с residual-сканом, аудит-лог, опциональное шифрование mapping
-- GUI: подсветка замен, HTML-отчёт, тёмная тема, автосохранение, Windows ACL
+- GUI: подсветка замен, HTML-отчёт, тёмная тема, автосохранение, Windows ACL, DnD файлов
 
 Подробности — в [docs/REFERENCE.md](docs/REFERENCE.md).
 

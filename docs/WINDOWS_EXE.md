@@ -98,6 +98,26 @@ Onefile-бинарники без подписи часто помечаются
 soc-log-anonymizer-cli.exe anonymize -i huge.log -o clean.log --salt-file salt.txt --stream --stats
 ```
 
+## Windows Event Log (.evtx)
+
+Бинарный `.evtx` (выгрузка Security/Sysmon) GUI и CLI не читают как текст —
+вызывают штатный `wevtutil qe <файл> /lf:true /f:text /uni:true` (без окна
+консоли в GUI). Дальше работают обычные паттерны (`Account Name:`, SID, IP).
+
+Перетащите `.evtx` на окно GUI или:
+
+```bat
+soc-log-anonymizer-cli.exe anonymize -i Security.evtx -o clean.log --salt-file salt.txt --fail-on-unsafe
+```
+
+Нужны Windows и `wevtutil` (есть в System32). Журнал на десятки/сотни МБ
+лучше заранее сузить в Event Viewer и экспортировать фрагмент: конвертация
+идёт целиком в память, таймаут — 4 минуты.
+
+Если exe запущен **от администратора**, а Проводник — нет, перетаскивание
+может блокироваться UAC; откройте файл через «Открыть» или запустите GUI
+без повышения прав.
+
 ## Обновление версии
 
 1. Замените `soc-log-anonymizer-gui.exe` новой сборкой.

@@ -145,9 +145,13 @@ class AnonymizerGUI(
         self._build_menu()
 
         self._add_placeholder(self.entry_salt, "случайная строка…")
-        self._add_placeholder(self.txt_input, "Вставьте лог сюда или нажмите «Открыть» (Ctrl+O)…")
+        self._add_placeholder(
+            self.txt_input,
+            "Вставьте лог, нажмите «Открыть» (Ctrl+O) или перетащите файл с Проводника…",
+        )
 
         self._bind_hotkeys()
+        self._install_windows_file_drop()
         self._reset_session_timer()
         self._offer_draft_recovery()
         self._schedule_autosave()

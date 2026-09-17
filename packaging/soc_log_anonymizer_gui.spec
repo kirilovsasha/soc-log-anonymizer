@@ -37,6 +37,8 @@ a = Analysis(
         "soc_log_anonymizer.winsec",
         "soc_log_anonymizer.crash",
         "soc_log_anonymizer.dpi",
+        "soc_log_anonymizer.evtx",
+        "soc_log_anonymizer.gui_dnd",
     ],
     hookspath=[],
     hooksconfig={},
