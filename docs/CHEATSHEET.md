@@ -1,5 +1,8 @@
 # Шпаргалка аналитика
 
+Порядок работы end-to-end (GUI/CLI, salt/mapping, чеклист LLM):
+[RUNBOOK.md](RUNBOOK.md).
+
 Три команды:
 
 ```text

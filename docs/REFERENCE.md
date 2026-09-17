@@ -25,6 +25,7 @@
 
 ## 📖 Содержание
 
+- [📋 Runbook аналитика](RUNBOOK.md)
 - [📓 Шпаргалка аналитика](CHEATSHEET.md)
 - [🚫 Ложные срабатывания](FALSE_POSITIVES.md)
 - [🧩 Свои regex](CUSTOM_PATTERNS.md)

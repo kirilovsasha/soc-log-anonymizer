@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Документация: [docs/RUNBOOK.md](docs/RUNBOOK.md) — одностраничный
+  runbook для SOC (GUI/CLI, salt/mapping, чеклист перед LLM).
+
 ## 2.5.0
 
 - PII ориентированные на РБ: УНП (контрольная сумма), личный номер,
