@@ -9,4 +9,7 @@
 | `verify()` красный на безобидном hex | Gatekeeper = те же regex | Те же фильтры, что и у замены; выключенные типы не проверяются. |
 | Компактный JSON разъезжался | Всегда `indent=2` | `json_preserve_formatting`: однострочный JSON остаётся однострочным. |
 
-Allowlist (не маскировать): `"allowlist": ["8.8.8.8", "Administrator"]`.
+Allowlist (не маскировать): в основном JSON-конфиге поле `"allowlist"` —
+массив строк или текст через переносы/запятые, например
+`"allowlist": ["8.8.8.8", "Administrator"]` или
+`"allowlist": "8.8.8.8\nAdministrator"`.

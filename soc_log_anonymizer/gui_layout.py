@@ -325,48 +325,9 @@ def _build_config_tab(app: "AnonymizerGUI", tab_config: ttk.Frame) -> None:
         command=app.generate_new_salt,
     ).pack(side=tk.LEFT)
 
-    # Allowlist editor (human-friendly)
-    allow_outer, allow_card = app._card(tab_config)
-    allow_outer.pack(fill=tk.X, padx=8, pady=(0, 6))
-    allow_header = ttk.Frame(allow_card, style="Card.TFrame")
-    allow_header.pack(fill=tk.X, padx=12, pady=(10, 4))
-    ttk.Label(allow_header, text="Allowlist — не маскировать", style="Section.TLabel").pack(
-        side=tk.LEFT
-    )
+    # Main application config (JSON) — allowlist exceptions live here as "allowlist"
     ttk.Label(
-        allow_header,
-        text="Точные значения (IP, логины…). Сохраняются в конфиг.",
-        style="Muted.TLabel",
-    ).pack(side=tk.LEFT, padx=12)
-
-    allow_body = ttk.Frame(allow_card, style="Card.TFrame")
-    allow_body.pack(fill=tk.X, padx=12, pady=(0, 10))
-
-    app.allowlist_list = tk.Listbox(
-        allow_body, height=5, exportselection=False, relief=tk.FLAT, borderwidth=0
-    )
-    app.allowlist_list.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
-    allow_scroll = ttk.Scrollbar(allow_body, orient=tk.VERTICAL, command=app.allowlist_list.yview)
-    app.allowlist_list.configure(yscrollcommand=allow_scroll.set)
-    allow_scroll.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
-
-    allow_side = ttk.Frame(allow_body, style="Card.TFrame")
-    allow_side.pack(side=tk.LEFT, fill=tk.Y)
-    app.allowlist_entry = ttk.Entry(allow_side, width=22, font=(FONT_UI, 9))
-    app.allowlist_entry.pack(fill=tk.X, pady=(0, 4))
-    app.allowlist_entry.bind("<Return>", lambda e: app.add_allowlist_value())
-    ttk.Button(allow_side, text="Добавить", style="Ghost.TButton",
-               command=app.add_allowlist_value).pack(fill=tk.X, pady=2)
-    ttk.Button(allow_side, text="Удалить", style="Ghost.TButton",
-               command=app.remove_allowlist_value).pack(fill=tk.X, pady=2)
-    ttk.Button(allow_side, text="+ DNS", style="Ghost.TButton",
-               command=lambda: app.add_allowlist_preset("dns_public")).pack(fill=tk.X, pady=2)
-    ttk.Button(allow_side, text="+ Windows", style="Ghost.TButton",
-               command=lambda: app.add_allowlist_preset("windows_builtin")).pack(fill=tk.X, pady=2)
-
-    # Advanced JSON
-    ttk.Label(
-        tab_config, text="Расширенный JSON", style="Muted.TLabel"
+        tab_config, text="Конфигурация JSON", style="Muted.TLabel"
     ).pack(anchor="w", padx=12, pady=(0, 2))
     config_outer, config_card = app._card(tab_config)
     config_outer.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))

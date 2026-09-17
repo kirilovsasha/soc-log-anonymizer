@@ -22,6 +22,38 @@ def normalize_key(key: str) -> str:
     return "".join(ch for ch in str(key).casefold() if ch.isalnum())
 
 
+def coerce_text_list(value: Any) -> List[str]:
+    """Normalize a list field from JSON/INI: array, or plain text with
+    newlines and/or commas (e.g. allowlist exceptions pasted as text)."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        items: List[str] = []
+        for line in value.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+            for part in line.split(","):
+                item = part.strip()
+                if item:
+                    items.append(item)
+        return items
+    if isinstance(value, (list, tuple, set)):
+        return [str(v).strip() for v in value if str(v).strip()]
+    item = str(value).strip()
+    return [item] if item else []
+
+
+def _uniq_ci(values: List[str]) -> List[str]:
+    """Case-insensitive unique, preserving first-seen spelling/order."""
+    seen = set()
+    out: List[str] = []
+    for item in values:
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
+
+
 def _normalize_custom_pattern_entry(name: str, value: Any) -> Dict[str, Any]:
     """Normalize a custom pattern spec from a simple regex string or a dict."""
     if isinstance(value, str):
@@ -367,6 +399,7 @@ class AnonymizerConfig:
     session_timeout_minutes: int = 20
 
     # Values that must stay unmasked (exact match, case-insensitive).
+    # In JSON: string list, or a single text block with newlines/commas.
     allowlist: List[str] = field(default_factory=list)
     fqdn_stopwords: List[str] = field(default_factory=list)
 
@@ -393,7 +426,7 @@ class AnonymizerConfig:
         self.custom_patterns = _normalize_custom_pattern_map(self.custom_patterns)
         if isinstance(self.context_rules, list):
             self.context_rules = [dict(rule) for rule in self.context_rules if isinstance(rule, dict)]
-        self.allowlist = [str(v).strip() for v in self.allowlist if str(v).strip()]
+        self.allowlist = _uniq_ci(coerce_text_list(self.allowlist))
         self.fqdn_stopwords = [str(v).strip() for v in self.fqdn_stopwords if str(v).strip()]
         return self
 
@@ -452,7 +485,7 @@ class AnonymizerConfig:
             if key not in defaults:
                 continue
             if key in _LIST_FIELDS:
-                data[key] = [v.strip() for v in raw_value.split(",") if v.strip()]
+                data[key] = coerce_text_list(raw_value)
             elif key in _DICT_FIELDS:
                 pairs = [p.strip() for p in raw_value.split(",") if p.strip()]
                 data[key] = dict(p.split(":", 1) for p in pairs if ":" in p)

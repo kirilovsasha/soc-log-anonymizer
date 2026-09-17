@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- GUI: removed the dedicated Allowlist list/text editor; exceptions are edited
+  only in the main JSON config (`"allowlist"`), which also accepts a plain
+  text block (newlines and/or commas) in addition to a string array.
+
 ## 2.4.0
 
 - Expanded golden corpus with Fortinet / Palo Alto / su-initiator / Azure /

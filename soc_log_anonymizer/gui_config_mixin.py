@@ -12,7 +12,6 @@ from typing import Optional
 from .config import AnonymizerConfig
 from .gui_constants import ICON_TAB_CONFIG, ICON_WARN
 from .gui_logic import salt_entropy_warning
-from .gui_profiles import ALLOWLIST_PRESETS, merge_lists
 from .paths import app_dir
 
 logger = logging.getLogger("soc_log_anonymizer")
@@ -46,7 +45,6 @@ class GuiConfigMixin:
             )
         self.txt_config.delete("1.0", tk.END)
         self.txt_config.insert(tk.END, json.dumps(self.config.as_dict(), ensure_ascii=False, indent=2))
-        self._refresh_allowlist_widget()
 
 
     def _parse_config_editor(self) -> Optional[AnonymizerConfig]:
@@ -65,8 +63,6 @@ class GuiConfigMixin:
             messagebox.showerror("Некорректный JSON", "Верхний уровень конфигурации должен быть JSON-объектом ({...}).")
             return None
         try:
-            if hasattr(self, "allowlist_list"):
-                data["allowlist"] = list(self.allowlist_list.get(0, tk.END))
             return AnonymizerConfig.from_dict(data)
         except (TypeError, ValueError) as e:
             messagebox.showerror("Некорректная конфигурация", f"Не удалось построить конфигурацию из JSON:\n{e}")
@@ -174,76 +170,6 @@ class GuiConfigMixin:
         defaults = AnonymizerConfig()
         self.txt_config.delete("1.0", tk.END)
         self.txt_config.insert(tk.END, json.dumps(defaults.as_dict(), ensure_ascii=False, indent=2))
-        if hasattr(self, "allowlist_list"):
-            self.allowlist_list.delete(0, tk.END)
-            for value in defaults.allowlist:
-                self.allowlist_list.insert(tk.END, value)
-
-
-    def _refresh_allowlist_widget(self) -> None:
-        if not hasattr(self, "allowlist_list"):
-            return
-        self.allowlist_list.delete(0, tk.END)
-        for value in self.config.allowlist:
-            self.allowlist_list.insert(tk.END, value)
-
-
-    def _sync_allowlist_from_widget(self) -> None:
-        if not hasattr(self, "allowlist_list"):
-            return
-        self.config.allowlist = list(self.allowlist_list.get(0, tk.END))
-
-
-    def add_allowlist_value(self) -> None:
-        value = (self.allowlist_entry.get() or "").strip()
-        if not value:
-            return
-        current = list(self.allowlist_list.get(0, tk.END))
-        merged = merge_lists(current, [value])
-        self.allowlist_list.delete(0, tk.END)
-        for item in merged:
-            self.allowlist_list.insert(tk.END, item)
-        self.allowlist_entry.delete(0, tk.END)
-        self._sync_allowlist_from_widget()
-        self._patch_config_editor_allowlist()
-
-
-    def remove_allowlist_value(self) -> None:
-        selection = list(self.allowlist_list.curselection())
-        if not selection:
-            return
-        for index in reversed(selection):
-            self.allowlist_list.delete(index)
-        self._sync_allowlist_from_widget()
-        self._patch_config_editor_allowlist()
-
-
-    def add_allowlist_preset(self, preset_id: str) -> None:
-        extras = ALLOWLIST_PRESETS.get(preset_id, [])
-        if not extras:
-            return
-        merged = merge_lists(self.allowlist_list.get(0, tk.END), extras)
-        self.allowlist_list.delete(0, tk.END)
-        for item in merged:
-            self.allowlist_list.insert(tk.END, item)
-        self._sync_allowlist_from_widget()
-        self._patch_config_editor_allowlist()
-        self._set_status(f"Allowlist: добавлен пресет {preset_id}", "Info")
-
-
-    def _patch_config_editor_allowlist(self) -> None:
-        """Keep advanced JSON in sync with the allowlist listbox."""
-        if not hasattr(self, "txt_config"):
-            return
-        try:
-            data = json.loads(self.txt_config.get("1.0", tk.END))
-        except json.JSONDecodeError:
-            return
-        if not isinstance(data, dict):
-            return
-        data["allowlist"] = list(self.allowlist_list.get(0, tk.END))
-        self.txt_config.delete("1.0", tk.END)
-        self.txt_config.insert(tk.END, json.dumps(data, ensure_ascii=False, indent=2))
 
 
     def load_config_file(self):
