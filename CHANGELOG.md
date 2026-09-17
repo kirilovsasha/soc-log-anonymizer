@@ -7,6 +7,8 @@
   text block (newlines and/or commas) in addition to a string array.
 - GUI: «Очистить всё» is on the main toolbar; removed from the «Ещё» menu.
 - GUI: hover tooltips on main toolbar buttons (with hotkeys where available).
+- Windows GUI exe: stop console window flashing from draft autosave ACL
+  updates (`icacls` now runs with `CREATE_NO_WINDOW`).
 
 ## 2.4.0
 

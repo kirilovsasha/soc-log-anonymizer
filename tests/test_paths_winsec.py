@@ -1,6 +1,7 @@
 """Tests for portable/installed paths and Windows ACL helpers."""
 
 import os
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -59,6 +60,22 @@ class TestWinsec(unittest.TestCase):
     def test_check_missing_file(self):
         self.assertIsNone(check_world_readable(os.path.join(self.tmp.name, "missing")))
         self.assertIsNone(restrict_sensitive_file(os.path.join(self.tmp.name, "missing")))
+
+    def test_windows_icacls_uses_create_no_window(self):
+        """Windowed GUI must not flash a console when restricting drafts via icacls."""
+        completed = mock.Mock(returncode=0, stdout="", stderr="")
+        with mock.patch.object(os, "name", "nt"):
+            with mock.patch.dict(os.environ, {"USERNAME": "tester"}, clear=False):
+                with mock.patch("soc_log_anonymizer.winsec.subprocess.run", return_value=completed) as run:
+                    with mock.patch("soc_log_anonymizer.winsec.sys.platform", "win32"):
+                        warning = restrict_sensitive_file(self.path)
+        self.assertIsNone(warning)
+        self.assertGreaterEqual(run.call_count, 2)
+        for call in run.call_args_list:
+            self.assertEqual(
+                call.kwargs.get("creationflags"),
+                getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
+            )
 
 
 class TestGuiLogicSizeWarning(unittest.TestCase):
