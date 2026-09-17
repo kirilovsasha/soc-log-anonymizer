@@ -9,8 +9,11 @@
 | `verify()` красный на безобидном hex | Gatekeeper = те же regex + residual | Те же фильтры, что и у замены; residual ловит email/`DOMAIN\user`/УНП/PAN. Отключить: `"residual_scan": false`. |
 | Компактный JSON разъезжался | Всегда `indent=2` | `json_preserve_formatting`: однострочный JSON остаётся однострочным. |
 | Слишком «дырявый» телефон/карта | `mask_strategies` partial | Полное скрытие: `"mask_strategies": {"PHONE": "full", "PAN": "full"}`. |
+| Инициатор su не маскировался | Только цель в `'su root'` | Паттерн `AUTH_USER_SU_FROM` маскирует `failed for X on`. |
+| ФИО в прозе («Иван Петров») | Нет NLP | Не маскируется намеренно; вынесите в JSON-поле или `custom_patterns`. |
 
 Allowlist (не маскировать): в основном JSON-конфиге поле `"allowlist"` —
 массив строк или текст через переносы/запятые, например
 `"allowlist": ["8.8.8.8", "Administrator"]` или
-`"allowlist": "8.8.8.8\nAdministrator"`.
+`"allowlist": "8.8.8.8\nAdministrator"`. Отдельного редактора allowlist
+в GUI больше нет — правьте JSON на вкладке «Конфигурация».

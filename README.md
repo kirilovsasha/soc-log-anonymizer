@@ -2,13 +2,13 @@
 
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
-[![Dependencies](https://img.shields.io/badge/dependencies-0%20(stdlib%20only)-brightgreen)](#features)
-[![Version](https://img.shields.io/badge/version-2.4.0-informational)](soc_log_anonymizer/__init__.py)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#installation)
+[![Dependencies](https://img.shields.io/badge/dependencies-0%20(stdlib%20only)-brightgreen)](docs/REFERENCE.md#features)
+[![Version](https://img.shields.io/badge/version-2.5.0-informational)](soc_log_anonymizer/__init__.py)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](docs/REFERENCE.md#installation)
 
 Инструмент для SOC-аналитиков: маскирует чувствительные данные в логах
-(IP, логины, email, хэши, SID, GUID, MAC, JWT, секреты и т.д.) перед
-отправкой во внешнюю LLM и восстанавливает исходные значения в ответе.
+(IP, логины, email, хэши, SID, GUID, MAC, JWT, УНП/PAN/IBAN, секреты и т.д.)
+перед отправкой во внешнюю LLM и восстанавливает исходные значения в ответе.
 
 **Только стандартная библиотека Python** — без внешних зависимостей.
 Доступен как GUI (tkinter), CLI и Python-библиотека.
@@ -17,13 +17,13 @@
 
 | Документ | Содержание |
 |---|---|
-| [Полный справочник](docs/REFERENCE.md) | Конфиг, CLI flags, security, limitations, структура |
+| [Полный справочник](docs/REFERENCE.md) | Конфиг, флаги CLI, безопасность, ограничения, структура |
 | [Шпаргалка аналитика](docs/CHEATSHEET.md) | Быстрые рецепты |
-| [Ложные срабатывания](docs/FALSE_POSITIVES.md) | FP/FN каталог |
-| [Свои regex](docs/CUSTOM_PATTERNS.md) | Custom patterns |
+| [Ложные срабатывания](docs/FALSE_POSITIVES.md) | Каталог FP/FN |
+| [Свои regex](docs/CUSTOM_PATTERNS.md) | Пользовательские паттерны |
 | [Windows EXE](docs/WINDOWS_EXE.md) | Сборка и установка |
 | [Релизы и PyPI](docs/PUBLISHING.md) | GitHub Releases, подпись, публикация |
-| [Mapping encryption](docs/MAPPING_ENCRYPTION.md) | Passphrase / DPAPI |
+| [Шифрование mapping](docs/MAPPING_ENCRYPTION.md) | Парольная фраза / DPAPI |
 
 ## Установка
 
@@ -63,10 +63,11 @@ with SOCLogAnonymizer(salt="...", org_name="bank") as anon:
 ## Возможности (кратко)
 
 - Консистентная HMAC-SHA256/PBKDF2 псевдонимизация IP/USER/EMAIL/HASH/JWT/…
-- Syslog, Cisco ASA/IOS, Checkpoint, Fortinet, Palo Alto, Azure/AWS JSON keys
+- Syslog, Cisco ASA/IOS, Checkpoint, Fortinet, Palo Alto, Azure/AWS, MaxPatrol 10
+- Идентификаторы РБ: УНП, личный номер, IBAN `BY…`, PAN (Luhn); телефоны `+375`/`80xx`
 - JSON/NDJSON (в т.ч. pretty-printed в `--stream`), gzip, batch, `--workers`
-- Gatekeeper `verify()`, audit log, optional encrypted mapping
-- GUI: diff highlight, HTML report, dark theme, autosave, Windows ACL
+- Gatekeeper `verify()` с residual-сканом, аудит-лог, опциональное шифрование mapping
+- GUI: подсветка замен, HTML-отчёт, тёмная тема, автосохранение, Windows ACL
 
 Подробности — в [docs/REFERENCE.md](docs/REFERENCE.md).
 

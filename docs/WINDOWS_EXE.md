@@ -46,7 +46,7 @@ pyinstaller packaging\soc_log_anonymizer_gui_onefile.spec
 pyinstaller packaging\soc_log_anonymizer_cli_onefile.spec
 ```
 
-## SmartScreen / Defender
+## SmartScreen и Defender
 
 Onefile-бинарники без подписи часто помечаются SmartScreen — это нормально
 для PyInstaller.
@@ -70,16 +70,16 @@ Onefile-бинарники без подписи часто помечаются
   текущего пользователя (`icacls` без видимого окна консоли —
   `CREATE_NO_WINDOW`); на POSIX — `chmod 600`.
 
-## Portable vs installed
+## Портативный и установленный режим
 
 | Режим | Как включить | Где данные |
 |---|---|---|
-| Installed (по умолчанию) | нет маркера | `%APPDATA%\SOC Log Anonymizer\` (state, crash log), `%LOCALAPPDATA%\...\drafts\` |
-| Portable | файл `portable.flag` рядом с exe, или `SOC_ANON_PORTABLE=1`, или меню «Настройки» | рядом с exe / `data\` |
+| Установленный (по умолчанию) | нет маркера | `%APPDATA%\SOC Log Anonymizer\` (state, crash log), `%LOCALAPPDATA%\...\drafts\` |
+| Портативный | файл `portable.flag` рядом с exe, или `SOC_ANON_PORTABLE=1`, или меню «Настройки» | рядом с exe / `data\` |
 
 Меню GUI: **Файл → Открыть папку приложения / данных / журнал ошибок**.
 
-## Журнал ошибок (windowed GUI)
+## Журнал ошибок (оконный GUI без консоли)
 
 При `console=False` traceback пишется в:
 
@@ -104,5 +104,5 @@ soc-log-anonymizer-cli.exe anonymize -i huge.log -o clean.log --salt-file salt.t
 
 ## CI
 
-GitHub Actions job `pyinstaller-windows` собирает **onefile** GUI+CLI и
+Job GitHub Actions `pyinstaller-windows` собирает **onefile** GUI+CLI и
 публикует zip-артефакты.

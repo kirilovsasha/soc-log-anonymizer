@@ -29,6 +29,8 @@
 - [🚫 Ложные срабатывания](FALSE_POSITIVES.md)
 - [🧩 Свои regex](CUSTOM_PATTERNS.md)
 - [💾 Windows EXE](WINDOWS_EXE.md)
+- [🔐 Шифрование mapping](MAPPING_ENCRYPTION.md)
+- [📦 Релизы и PyPI](PUBLISHING.md)
 - [📦 Установка](#installation)
 - [⚡ Быстрый старт](#quick-start)
 - [🖥️ GUI](#gui)
@@ -38,7 +40,7 @@
 - [🙈 Что маскируется](#masked-data)
 - [🔁 Принцип консистентной псевдонимизации](#pseudonymization)
 - [📈 Производительность на больших логах](#performance)
-- [🔐 Security](#security)
+- [🔐 Безопасность](#security)
 - [📝 Логирование и коды возврата](#logging)
 - [🧾 Аудиторский журнал](#audit-log)
 - [⚠️ Известные ограничения](#limitations)
@@ -89,16 +91,20 @@
 - 🔁 Одно и то же значение везде получает один и тот же псевдоним
   (см. [ниже](#pseudonymization)).
 - 🔑 **HMAC-SHA256 с ключом, растянутым через PBKDF2** (см.
-  [Security](#security)), защита от коллизий хэша,
+  [Безопасность](#security)), защита от коллизий хэша,
   `secrets.compare_digest` при сравнении псевдонимов.
 - ⏱️ **Базовая защита от ReDoS**: обработка текстового блока выполняется с
   таймаутом (`config.regex_timeout_seconds`); при превышении — явный
   маркер вместо потенциально частично замаскированного текста.
 - 🧹 `SOCLogAnonymizer` — контекстный менеджер, явно очищающий чувствительные
   данные из памяти (`with SOCLogAnonymizer(...) as a: ...`).
-- ✅ Gatekeeper-проверка (`verify()`) итогового текста перед отправкой в LLM.
+- ✅ Gatekeeper-проверка (`verify()`) итогового текста перед отправкой в LLM;
+  с 2.5.0 — с residual-сканом «остатков» сверх основных regex.
+- 🇧🇾 Встроенные идентификаторы РБ: УНП, личный номер, IBAN `BY…`, PAN
+  (Luhn); стратегии `mask_strategies` (partial/full/format).
 - 🔓 Полная деанонимизация ответа LLM обратно в исходные значения;
-  mapping-файлы версионируются (`schema_version`) для совместимости.
+  mapping-файлы версионируются (`schema_version`) для совместимости;
+  опциональное шифрование mapping (пароль / Windows DPAPI).
 - 🗜️ **Прозрачная поддержка gzip-архивов** (`app.log.gz`) на чтение — во
   всех режимах (обычном, `--stream`, `batch`), без ручной распаковки;
   распознаётся по магическим байтам, а не только по расширению `.gz`.
@@ -297,17 +303,17 @@ python3 -m soc_log_anonymizer gui
 | 📋 Скопировать / 💾 Сохранить | Экспорт результата |
 | 🔀 HTML Diff отчёт | Сгенерировать diff исходного и анонимизированного текста и открыть его в браузере (для отправки коллеге или печати) — подсвечены только конкретные заменённые значения, а не строки целиком |
 | 📊 Статистика | Сколько и каких значений было заменено в текущей сессии |
-| 🗑 Очистить всё | Сбросить оба окна и явно очистить чувствительные данные из памяти |
-| Организация / Соль | Параметры текущей обработки. Поля показывают placeholder-подсказку, пока пусты. 🎲 генерирует новую случайную соль; поле соли подсвечивается красной рамкой ещё во время набора, если введённая соль выглядит слабой (не только по клику на «Анонимизировать») |
-- В панели файлов GUI можно удалить файл или изменить порядок перед
-обработкой; кнопка отмены доступна во время загрузки и анонимизации. Поля показывают placeholder-подсказку, пока пусты. 🎲 генерирует новую случайную соль; поле соли подсвечивается красной рамкой ещё во время набора, если введённая соль выглядит слабой (не только по клику на «Анонимизировать») |
-
-Полная история изменений находится в [CHANGELOG.md](CHANGELOG.md). Поля показывают placeholder-подсказку, пока пусты. 🎲 генерирует новую случайную соль; поле соли подсвечивается красной рамкой ещё во время набора, если введённая соль выглядит слабой (не только по клику на «Анонимизировать») |
-| 🌙 Тёмная тема | Переключение цветовой схемы (реализовано через `ttk.Style`, а не ручную перекраску виджетов) |
-| Шрифт | Размер шрифта в текстовых полях (8–18 пт) |
+| 🗑 Очистить всё | На главной панели: сбросить оба окна и явно очистить чувствительные данные из памяти |
+| Соль (вкладка «Конфигурация») | Секрет сессии (не часть JSON-конфига). 🎲 генерирует новую случайную соль; поле подсвечивается красной рамкой ещё во время набора, если соль выглядит слабой |
+| Организация (`org_name`) | Только в JSON-конфиге (поля на панели инструментов нет) |
+| 🌙 Тёмная тема / Шрифт | Меню «Вид»: цветовая схема (`ttk.Style`) и размер шрифта (8–18 пт) |
 | Таблица соответствия | Наведение курсора на строку показывает всплывающую подсказку с контекстом — где именно в исходном логе встретилось это значение |
 | Вкладка «Таблица соответствия» | Полный список замен, поиск, экспорт в CSV/JSON |
-| Вкладка «⚙ Конфигурация» | Редактирование и сохранение конфигурации прямо в GUI, включая открытие произвольного существующего файла (см. [Редактирование конфигурации в GUI](#config-gui)) |
+| Вкладка «⚙ Конфигурация» | JSON-конфиг (включая `allowlist`), соль сессии, открытие/сохранение файла (см. [Редактирование конфигурации в GUI](#config-gui)) |
+
+В панели файлов можно удалить файл или изменить порядок перед обработкой;
+кнопка отмены доступна во время загрузки и анонимизации. История
+изменений — в [CHANGELOG.md](../CHANGELOG.md).
 
 Длинные строки в Input/Output переносятся по словам на ширину окна
 (`wrap=tk.WORD`) — горизонтальной прокрутки нет, длинную строку лога не
@@ -382,14 +388,6 @@ soc_log_anonymizer validate-config FILE
 `validate-config` дополнительно проверяет типы полей и конфликты
 нормализованных JSON-ключей.
 
-### Изменения (2.1.x)
-
-- GUI поддерживает импорт нескольких файлов и папки, разделяет содержимое
-  визуальным разделителем, сообщает о частично повреждённых/недоступных
-  файлах и позволяет отменить загрузку или обработку.
-- Конфигурации получили `config_version`; mapping сохраняет метаданные
-  алгоритма при полной обратной совместимости старых файлов.
-
 **Gzip-архивы** (`app.log.gz`) принимаются как входной файл (`-i`) во
 всех подкомандах и режимах (обычном, `--stream`, `batch`, multi-file) без
 какой-либо специальной настройки — распознаются по магическим байтам
@@ -415,10 +413,11 @@ python3 -m soc_log_anonymizer anonymize \
 - `files...` (позиционные аргументы) — один или несколько файлов/glob-
   шаблонов вместо `-i`, например `anonymize logs/*.log --output-dir clean/`.
   При нескольких файлах обязателен `--output-dir`.
-- `--stream` — построчная обработка с постоянным потреблением памяти,
-  для очень больших файлов (не разбирает JSON, растянутый на много строк —
-  см. [ограничения](#limitations)). Без `--workers`/`--mmap`
-  читает файл лениво построчно (не грузит его в память целиком).
+- `--stream` — построчная обработка с постоянным потреблением памяти
+  для очень больших файлов. Pretty-printed JSON, растянутый на несколько
+  строк, накапливается и маскируется через `anonymize_json` (см.
+  [ограничения](#limitations)). Без `--workers`/`--mmap` читает файл
+  лениво построчно (не грузит его в память целиком).
 - `--mmap` — вместе с `--stream` (однопоточный режим) читает файл через
   `mmap` вместо обычного `open()` — эффективнее на очень больших файлах
   (десятки ГБ) на быстрых дисках. Кодировка определяется по первому
@@ -471,6 +470,15 @@ python3 -m soc_log_anonymizer anonymize \
 
 ### `scan` 🔎
 
+`scan` читает входные файлы, выполняет тот же анализ и печатает по одному
+JSON-отчёту на файл (`input`, `replacements`, `stats_by_type`), но ничего
+не записывает и не сохраняет mapping. Это удобно для предварительной
+проверки пайплайна:
+
+```bash
+python3 -m soc_log_anonymizer scan logs/*.log --salt-file salt.txt
+```
+
 ### `verify-result` ✅
 
 Проверяет уже записанные результаты `verify()` и ничего не
@@ -487,21 +495,12 @@ python3 -m soc_log_anonymizer verify-result --input-dir clean \
 `--fail-on-unsafe` возвращает код `2`, если хотя бы один результат
 небезопасен (ошибка чтения возвращает `1`).
 
-`scan` читает входные файлы, выполняет тот же анализ и печатает по одному
-JSON-отчёту на файл (`input`, `replacements`, `stats_by_type`), но ничего
-не записывает и не сохраняет mapping. Это удобно для предварительной
-проверки пайплайна:
-
-```bash
-python3 -m soc_log_anonymizer scan logs/*.log --salt-file salt.txt
-```
-
 Файловые результаты CLI записываются атомарно через временный файл в том
 же каталоге и замену `os.replace`: прерванный запуск не оставляет
-частично перезаписанный лог. Таблица соответствия по-прежнему является
-секретом и должна храниться с ограниченными правами; шифрование
-mapping-файлов намеренно не является частью проекта — используйте
-защищённое хранилище/шифрование диска и `--strict-perms`.
+частично перезаписанный лог. Таблица соответствия — секрет: храните её
+с ограниченными правами (`--strict-perms`, шифрование диска). Опционально
+можно зашифровать сам mapping (`--mapping-passphrase` /
+`--mapping-dpapi`) — см. [MAPPING_ENCRYPTION.md](MAPPING_ENCRYPTION.md).
 - Если входной файл (без `--stream`) превышает `max_input_size_mb` из
   конфига (по умолчанию 500 МБ) — выводится предупреждение с
   рекомендацией использовать `--stream`.
@@ -602,6 +601,8 @@ INI-файлом (формат определяется по расширени�
 | `org_aliases` | Альтернативные написания/сокращения названия организации (например, `["Bank of Example", "BoE"]`) — маскируются наравне с `org_name` |
 | `org_aliases_share_pseudonym` | По умолчанию `false` — `org_name` и каждый `org_alias` получают РАЗНЫЕ псевдонимы (разные строки => разный хэш), даже если по смыслу это одна организация. При `true` — все буквальные упоминания сходятся к одному псевдониму от `org_name`; **не затрагивает** домены/email, где название организации входит как часть строки (`example.com` продолжает маскироваться самостоятельно как `[FQDN_...]`). Деанонимизация при `true` всегда восстанавливает каноническое `org_name`, а не конкретный алиас, встретившийся в этом месте текста |
 | `allowlist` | Значения, которые оставлять как есть. Массив строк или текстовый блок через переносы/запятые (`["8.8.8.8"]` / `"8.8.8.8\\nAdministrator"`) |
+| `mask_strategies` | Стратегия маскирования по типу: `full` / `partial` / `format`. По умолчанию partial для PHONE/PAN/IBAN/BY_ID, full для UNP |
+| `residual_scan` | `true` (по умолчанию): `verify()` дополнительно ищет «остатки» (email, `DOMAIN\\user`, УНП/PAN/телефон РБ) сверх основных regex замены |
 | `hash_require_context` | `true` (по умолчанию): HASH в свободном тексте только рядом с hash/md5/sha/ntlm |
 | `json_preserve_formatting` | `true`: компактный JSON не pretty-print'ится через `indent=2` |
 | `multiline_join` | Склеивать syslog-продолжения с `\` и indented traceback |
@@ -639,11 +640,12 @@ SOC_ANON_CONFIG=myconfig.json python3 -m soc_log_anonymizer anonymize -i raw.log
 [anonymizer]
 org_name = acme
 hash_len = 12
-fqdn_tlds = com,net,local,internal
-phone_prefixes = +7,+1
+fqdn_tlds = com,net,local,internal,by
+phone_prefixes = +375,80
 cef_fields = src,dst,suser,duser
 sensitive_json_keys = user,ip,email
 key_type_hints = user:USER,ip:IP
+mask_strategies = PHONE:partial,PAN:partial,UNP:full
 ```
 
 ### Автопоиск конфига рядом с приложением 🔎
@@ -763,7 +765,7 @@ Windows-логин и т.д. Псевдоним строится по опред
   сравнению с обычным `__dict__` на экземпляр.
 
 <a id="security"></a>
-## Security 🔐
+## Безопасность 🔐
 
 - **Соль растягивается через PBKDF2-HMAC-SHA256** (`hashlib.pbkdf2_hmac`,
   `config.pbkdf2_iterations`, по умолчанию 600 000 итераций — актуальная
@@ -780,9 +782,11 @@ Windows-логин и т.д. Псевдоним строится по опред
   разных значения никогда не "сливаются" под одним псевдонимом.
 - **Таблица соответствия (mapping) и её экспорт (CSV/JSON) — это, по
   сути, ключ деанонимизации.** Файлы создаются с правами доступа `0600`
-  (POSIX), GUI и CLI явно предупреждают перед экспортом/сохранением.
-  Обращайтесь с этими файлами так же осторожно, как с исходным логом.
-  `.gitignore` проекта по умолчанию исключает такие файлы.
+  (POSIX) / ACL текущего пользователя (Windows), GUI и CLI явно
+  предупреждают перед экспортом/сохранением. Обращайтесь с этими файлами
+  так же осторожно, как с исходным логом. `.gitignore` проекта по
+  умолчанию исключает такие файлы. Опциональное шифрование содержимого —
+  [MAPPING_ENCRYPTION.md](MAPPING_ENCRYPTION.md).
 - **Явная очистка памяти**: `SOCLogAnonymizer` — контекстный менеджер
   (`with ... as a:`), а `clear_sensitive_data()` можно вызвать вручную в
   любой момент (GUI делает это по таймауту сессии, при «Очистить всё» и
@@ -892,7 +896,7 @@ CLI использует стандартный модуль `logging` вмес�
 {"action": "anonymize", "source": "cli", "input": "raw.log", "org_name": "bank",
  "stats_by_type": {"IP": 12, "EMAIL": 4}, "unique_values_replaced": 14,
  "exit_code": 0, "timestamp": "2026-09-01T18:45:04+00:00",
- "tool_version": "2.1.0", "user": "alice", "host": "soc-workstation"}
+ "tool_version": "2.5.0", "user": "alice", "host": "soc-workstation"}
 ```
 
 Ограничение: в `batch --workers N` (N > 1) каждый воркер — отдельный
@@ -908,12 +912,12 @@ CLI использует стандартный модуль `logging` вмес�
   распознаёт имена и фамилии в свободном тексте («сотрудник Иван Петров
   сообщил...») и произвольные внутренние идентификаторы вне описанных
   форматов.
-- `USER_FIELD`/`SECRET`/`CEF_KV` рассчитаны на форматы `key=value` и
-  `key: value` без окружающих кавычек JSON-стиля. Если такая
-  конструкция встречается внутри строки, которая сама не является
-  отдельным валидным JSON/NDJSON-документом, эвристика может её не
-  подхватить — используйте полноценный JSON/NDJSON вход там, где это
-  возможно, чтобы сработала точная логика по ключам.
+- `USER_FIELD`/`SECRET`/`CEF_KV` рассчитаны на форматы `key=value`,
+  `key: value` и (с 2.5.0) кавычки `key="value with spaces"` /
+  `key='…'`. Если такая конструкция встречается внутри строки, которая
+  сама не является отдельным валидным JSON/NDJSON-документом, эвристика
+  всё ещё может её не подхватить — используйте полноценный JSON/NDJSON
+  вход там, где это возможно, чтобы сработала точная логика по ключам.
 - `AUTH_USER`/`AUTH_USER_CISCO`/`AUTH_USER_SU_FROM`/`AUTH_USER_SUDO`/
   `AUTH_USER_WIN` (упоминания пользователя без `=`/`:` — sshd/su/Cisco/
   sudo/Windows Account Name) рассчитаны на конкретный, ограниченный набор
@@ -939,11 +943,12 @@ CLI использует стандартный модуль `logging` вмес�
 - Паттерн `USER` (`DOMAIN\user`) может технически ложно сработать на
   произвольном тексте вида `Слово\ДругоеСлово` — унаследованная
   особенность формата Windows-логинов.
-- `--stream` and `anonymize_stream()` accumulate pretty-printed JSON
-  documents that span multiple lines (brace-balanced via
-  `json.JSONDecoder.raw_decode`) and mask them with `anonymize_json`.
-  Extremely large single JSON documents still require enough memory for
-  one document at a time; prefer NDJSON for multi-GB feeds.
+- `--stream` и `anonymize_stream()` накапливают pretty-printed
+  JSON-документы, растянутые на несколько строк (баланс скобок через
+  `json.JSONDecoder.raw_decode`), и маскируют их через `anonymize_json`.
+  Очень большие одиночные JSON-документы по-прежнему требуют памяти
+  на один документ целиком; для многогигабайтных потоков предпочтителен
+  NDJSON.
 - Защита от ReDoS (`regex_timeout_seconds`) не может принудительно
   прервать уже запущенный regex-матчинг (ограничение CPython/GIL) —
   она гарантирует, что вызывающий код не получит частично
@@ -1029,7 +1034,7 @@ python3 -m soc_log_anonymizer anonymize -i big.log --salt-file salt.txt \
     --profile --profile-memory -v -o /dev/null
 ```
 
-### Continuous Integration 🔄
+### Непрерывная интеграция (CI) 🔄
 
 `.github/workflows/ci.yml` прогоняет на каждый push/PR в `main`:
 
@@ -1055,49 +1060,43 @@ GUI, зависящая от tkinter, изолирована в `gui.py`, а `gu
 soc-log-anonymizer/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml         # GitHub Actions: тесты, gzip/mmap, zipapp, pip install
+│       ├── ci.yml              # тесты, gzip/mmap, zipapp, PyInstaller, pip
+│       ├── release.yml         # GitHub Release по тегу
+│       └── publish-pypi.yml    # публикация на PyPI
 ├── soc_log_anonymizer/
-│   ├── __init__.py       # публичный API пакета, __version__
-│   ├── __main__.py       # точка входа (python -m / zipapp)
-│   ├── config.py         # AnonymizerConfig — параметры, JSON/INI, валидация
-│   ├── anonymizer.py     # основная логика анонимизации (HMAC+PBKDF2, ReDoS-таймаут, __slots__)
-│   ├── audit.py          # опциональный JSON Lines аудиторский журнал операций (без содержимого)
-│   ├── io_utils.py       # автоопределение кодировки, gzip, mmap-стриминг, проверка прав доступа
-│   ├── cli.py             # CLI (argparse): anonymize/deanonymize/batch/validate-config/--version
-│   ├── gui_logic.py       # чистая логика GUI без tkinter (тестируется где угодно)
-│   ├── gui_constants.py   # иконки и размеры GUI
-│   ├── gui_theme.py       # палитры и цвета типов
-│   ├── gui_profiles.py    # allowlist-хелперы GUI
-│   ├── gui_diff_html.py   # HTML diff-отчёт
-│   ├── gui_layout.py      # раскладка главного окна
-│   └── gui.py             # GUI (tkinter): оркестрация, обработка, mapping, конфиг
-├── tests/
-│   ├── test_anonymizer.py
-│   ├── test_cli.py        # unittest.mock, включая --version и gzip
-│   ├── test_io_utils.py   # gzip, mmap-стриминг, права доступа
-│   ├── test_doctests.py   # интеграция doctest в discovery
-│   ├── test_gui_logic.py  # логика GUI без tkinter
-│   └── test_fuzz.py       # fuzz-тест на random с фиксированным seed
+│   ├── __init__.py             # публичный API, __version__
+│   ├── __main__.py             # точка входа (python -m / zipapp)
+│   ├── config.py               # AnonymizerConfig — JSON/INI, валидация
+│   ├── anonymizer.py           # HMAC+PBKDF2, ReDoS-таймаут, маскирование
+│   ├── detectors.py            # типы/префиксы паттернов
+│   ├── mapping_crypto.py       # опциональное шифрование mapping
+│   ├── parallel_merge.py       # слияние mapping после --workers
+│   ├── json_stream.py          # накопление pretty-printed JSON в --stream
+│   ├── structured.py           # RFC5424 / structured helpers
+│   ├── result.py               # AnonymizeResult
+│   ├── audit.py                # JSON Lines аудит (без содержимого)
+│   ├── io_utils.py             # кодировки, gzip, mmap, права доступа
+│   ├── paths.py / winsec.py / crash.py / dpi.py
+│   ├── cli.py                  # CLI: anonymize/scan/deanonymize/batch/…
+│   ├── gui_logic.py            # логика GUI без tkinter
+│   ├── gui_constants.py / gui_theme.py / gui_profiles.py
+│   ├── gui_diff_html.py / gui_layout.py
+│   ├── gui_*_mixin.py          # файлы, diff, process, mapping, config, …
+│   └── gui.py                  # тонкая оболочка tkinter
+├── tests/                      # unittest, golden corpus, quality, fuzz
 ├── examples/
-│   ├── sample.log
-│   ├── sample_config.json
-│   └── sample_config.ini
-├── packaging/
-│   ├── gui_entrypoint.py / cli_entrypoint.py
-│   ├── soc_log_anonymizer_gui_onefile.spec  # один автономный GUI .exe
-│   ├── soc_log_anonymizer_cli_onefile.spec  # один автономный CLI .exe
-│   ├── soc_log_anonymizer_gui.spec / *_cli.spec  # опционально onedir
-│   ├── build_windows.bat / icon.ico / version_info*.txt
-│   └── default_config.json
+│   ├── sample.log / sample_config.json / sample_config.ini
+│   └── maxpatrol10_event.json
+├── packaging/                  # PyInstaller specs, default_config, icon
 ├── docs/
-│   └── WINDOWS_EXE.md      # раздача Windows EXE, SmartScreen, portable
-├── run_gui.bat             # Windows: запуск GUI с диагностикой (видимая консоль)
-├── run_gui_silent.bat      # Windows: запуск GUI без консоли (после проверки run_gui.bat)
-├── soc-log-anonymizer.bat  # Windows: CLI-обёртка
-├── setup_venv.bat          # Windows: опциональная установка в venv
+│   ├── REFERENCE.md            # полный справочник
+│   ├── CHEATSHEET.md / FALSE_POSITIVES.md / CUSTOM_PATTERNS.md
+│   ├── WINDOWS_EXE.md / MAPPING_ENCRYPTION.md / PUBLISHING.md
+├── run_gui.bat / run_gui_silent.bat / soc-log-anonymizer.bat
+├── setup_venv.bat
 ├── pyproject.toml
+├── CHANGELOG.md
 ├── LICENSE
-├── .gitignore
 └── README.md
 ```
 

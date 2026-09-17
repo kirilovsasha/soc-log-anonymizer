@@ -4,83 +4,99 @@
 
 ## 2.5.0
 
-- Belarus-oriented PII: UNP (checksum), BY personal id, BY IBAN (mod-97),
-  PAN (Luhn); default phone prefixes `+375` / `80xx` and TLD `.by`.
-- `mask_strategies` config (default: partial for PHONE/PAN/IBAN/BY_ID).
-- Residual scan in `verify()` / `get_quality_report()` for leftovers beyond
-  the same regexes used to mask (`--fail-on-unsafe` benefits).
-- Quoted `key="value with spaces"` / `key='…'` for USER_FIELD and SECRET.
+- PII ориентированные на РБ: УНП (контрольная сумма), личный номер,
+  IBAN BY (mod-97), PAN (Luhn); префиксы телефонов по умолчанию `+375` /
+  `80xx` и TLD `.by`.
+- Конфиг `mask_strategies` (по умолчанию partial для PHONE/PAN/IBAN/BY_ID).
+- Residual-скан в `verify()` / `get_quality_report()` для остатков сверх
+  тех же regex, что использовались при маскировании (полезно с
+  `--fail-on-unsafe`).
+- Кавычки в `key="value with spaces"` / `key='…'` для USER_FIELD и SECRET.
 - AUTH: `Invalid user`, `authentication failure for`, `sudo: user :`,
   Windows `Account Name:`.
-- Packaging `default_config.json` tuned for Belarus Windows EXE deployments.
-- Golden corpus + `tests/test_quality_v25.py`.
-- MaxPatrol 10 / PT SIEM taxonomy keys in defaults (`event_src.host`,
-  `subject.account.*`, `recv_ipv4`, assets, MAC/email/phone on subject/object);
-  sample `examples/maxpatrol10_event.json`.
-- GUI: removed the dedicated Allowlist list/text editor; exceptions are edited
-  only in the main JSON config (`"allowlist"`), which also accepts a plain
-  text block (newlines and/or commas) in addition to a string array.
-- GUI: «Очистить всё» is on the main toolbar; removed from the «Ещё» menu.
-- GUI: hover tooltips on main toolbar buttons (with hotkeys where available).
-- Windows GUI exe: stop console window flashing from draft autosave ACL
-  updates (`icacls` now runs with `CREATE_NO_WINDOW`).
+- `packaging/default_config.json` заточен под Windows EXE-развёртывания в РБ.
+- Золотой корпус + `tests/test_quality_v25.py`.
+- Ключи таксономии MaxPatrol 10 / PT SIEM в дефолтах (`event_src.host`,
+  `subject.account.*`, `recv_ipv4`, assets, MAC/email/phone на
+  subject/object); пример `examples/maxpatrol10_event.json`.
+- GUI: убран отдельный редактор Allowlist; исключения только в основном
+  JSON-конфиге (`"allowlist"`), который также принимает текстовый блок
+  (переносы и/или запятые) помимо массива строк.
+- GUI: «Очистить всё» на главной панели инструментов; убрано из меню «Ещё».
+- GUI: всплывающие подсказки на кнопках главной панели (с горячими
+  клавишами, где есть).
+- Windows GUI exe: больше не мигает консольное окно при обновлении ACL
+  черновика (`icacls` запускается с `CREATE_NO_WINDOW`).
 
 ## 2.4.0
 
-- Expanded golden corpus with Fortinet / Palo Alto / su-initiator / Azure /
-  AWS / Windows Event JSON cases; added FP/FN scoring tests.
-- AUTH patterns: su initiator (`'su root' failed for X on`), Fortinet quoted
-  user/login, Palo Alto `from user` / `User … failed`.
-- Default JSON keys/hints for Azure AD, AWS CloudTrail, Windows Event fields.
-- Deterministic collision-suffix merge after `--workers` / `batch --workers`.
-- `--stream` accumulates pretty-printed multi-line JSON documents.
-- Optional mapping encryption: `--mapping-passphrase` / `--mapping-dpapi`.
-- GUI split into mixin modules (`gui_*_mixin.py`); `gui.py` is a thin shell.
-- `pip install -e ".[dev]"` extras; CI lint/typecheck on full package;
-  benchmark job; GitHub Release + PyPI publish workflows.
-- README shortened; full reference moved to `docs/REFERENCE.md`.
+- Расширен золотой корпус: Fortinet / Palo Alto / инициатор su / Azure /
+  AWS / Windows Event JSON; добавлены тесты оценки FP/FN.
+- AUTH-паттерны: инициатор su (`'su root' failed for X on`), Fortinet
+  quoted user/login, Palo Alto `from user` / `User … failed`.
+- Дефолтные JSON-ключи/подсказки для Azure AD, AWS CloudTrail, Windows Event.
+- Детерминированное слияние суффиксов коллизий после `--workers` /
+  `batch --workers`.
+- `--stream` накапливает pretty-printed многострочные JSON-документы.
+- Опциональное шифрование mapping: `--mapping-passphrase` / `--mapping-dpapi`.
+- GUI разбит на mixin-модули (`gui_*_mixin.py`); `gui.py` — тонкая оболочка.
+- Extras `pip install -e ".[dev]"`; CI lint/typecheck по всему пакету;
+  benchmark job; workflow’ы GitHub Release и публикации на PyPI.
+- README сокращён; полный справочник перенесён в `docs/REFERENCE.md`.
 
 ## 2.3.0
 
-- Windows EXE packaging: **onefile** GUI+CLI (primary), optional onedir,
-  PE version/icon, DPI hook, default config bundle, `build_windows.bat`,
-  Windows CI artifacts.
-- GUI: crash log + MessageBox for windowed builds, AppData/portable data
-  paths, draft autosave toggle, open app/data/crash folders, large-file
-  preview+sidecar defaults.
-- Security: Windows ACL (`icacls`) for salt/mapping/drafts; docs
-  `docs/WINDOWS_EXE.md`.
-- Fixed Windows CLI crash (`UnicodeEncodeError`) when printing Cyrillic messages on cp1252 consoles (also CI on `windows-latest`).
-- Fixed GUI highlight falsely marking allowlisted tokens (e.g. `administrator`) when a shorter mapped value like `admin` was a substring.
-- Compacted the GUI header into a single toolbar row; secondary actions live under «Ещё», theme/font/sync under «Вид».
-- `org_name` is config-only (toolbar field removed); Copy result is on the main toolbar.
-- Split GUI into `gui_constants`, `gui_layout`, `gui_profiles`, `gui_diff_html` modules.
-- Added a list-based allowlist editor on the Config tab (no source profiles).
-- Removed GUI session fields `mask_types` / `skip_types` / `allowlist`; `allowlist` remains config-only.
-- Removed `mask_types` and `skip_types` configuration options entirely.
+- Упаковка Windows EXE: **onefile** GUI+CLI (основной вариант), опциональный
+  onedir, PE version/icon, DPI hook, бандл дефолтного конфига,
+  `build_windows.bat`, артефакты Windows CI.
+- GUI: crash-лог + MessageBox для windowed-сборок, пути AppData/portable,
+  переключатель автосохранения черновика, открытие папок приложения/
+  данных/ошибок, превью+sidecar для больших файлов по умолчанию.
+- Безопасность: Windows ACL (`icacls`) для соли/mapping/черновиков;
+  документация `docs/WINDOWS_EXE.md`.
+- Исправлен краш Windows CLI (`UnicodeEncodeError`) при выводе кириллицы
+  на консолях cp1252 (также CI на `windows-latest`).
+- Исправлена ложная подсветка allowlist-токенов в GUI (например,
+  `administrator`), когда более короткое значение вроде `admin` было
+  подстрокой.
+- Компактная шапка GUI в одну строку панели; вторичные действия — в «Ещё»,
+  тема/шрифт/синхронный скролл — в «Вид».
+- `org_name` только в конфиге (поле на панели убрано); «Скопировать
+  результат» — на главной панели.
+- GUI разделён на модули `gui_constants`, `gui_layout`, `gui_profiles`,
+  `gui_diff_html`.
+- Добавлен списочный редактор allowlist на вкладке «Конфигурация»
+  (без source-профилей).
+- Убраны session-поля GUI `mask_types` / `skip_types` / `allowlist`;
+  `allowlist` остаётся только в конфиге.
+- Опции конфигурации `mask_types` и `skip_types` удалены полностью.
 
 ## 2.2.0
 
-- Removed generic PATH masking; protocol/date/cipher slashes stay intact.
-- Added `mask_types`, `skip_types`, `allowlist`, stricter HASH/FQDN/PHONE/USER filters,
-  JSON compact preservation, multiline join, RFC5424 host split, and `anonymize_result()`.
-- GUI: Scan preview, session mask/skip/allowlist fields, mapping type filter and jump-to-value,
-  large-file sidecar output; theme constants extracted to `gui_theme.py`.
-- Docs: analyst cheat sheet, false-positive catalog, custom-pattern guide; golden corpus tests.
-- Stopped masking filesystem paths as `PATH`. The old `/`-anywhere regex
-  treated protocol versions, dates, and cipher suites (`HTTP/1.1`,
-  `2026/09/16`, `IKEv2/AES256`) as paths. Usernames in home directories
-  (`C:\Users\jdoe`, `/home/jdoe`, `/Users/jdoe`) are still masked as `USER`.
-- Added scan reports in JSONL, JSON, and CSV formats with file sizes,
-  replacement counts, line counts, changed-line positions, safety status,
-  timing, and cache metrics.
-- Added `batch --dry-run` and optional JSON progress events.
-- Added `diff-config` and `validate-config --fix`.
-- Added opt-in custom regex patterns/types in configuration.
-- Added GUI file ordering/removal, folder import, and cancellation.
-- Added encoding-corruption warnings and documentation/example checks.
+- Убрано общее маскирование PATH; слэши в протоколах/датах/шифрах
+  остаются нетронутыми.
+- Добавлены `mask_types`, `skip_types`, `allowlist`, более строгие фильтры
+  HASH/FQDN/PHONE/USER, сохранение компактного JSON, склейка многострочных
+  продолжений, разбор RFC5424 host и `anonymize_result()`.
+- GUI: превью Scan, session-поля mask/skip/allowlist, фильтр типов в
+  таблице соответствия и переход к значению, sidecar-вывод для больших
+  файлов; константы темы вынесены в `gui_theme.py`.
+- Документация: шпаргалка аналитика, каталог ложных срабатываний,
+  руководство по своим regex; тесты золотого корпуса.
+- Прекращено маскирование путей файловой системы как `PATH`. Старый
+  regex «любой `/`» воспринимал версии протоколов, даты и cipher suites
+  (`HTTP/1.1`, `2026/09/16`, `IKEv2/AES256`) как пути. Имена
+  пользователей в домашних каталогах (`C:\Users\jdoe`, `/home/jdoe`,
+  `/Users/jdoe`) по-прежнему маскируются как `USER`.
+- Отчёты scan в форматах JSONL, JSON и CSV: размер файла, счётчики
+  замен, число строк, позиции изменённых строк, статус безопасности,
+  тайминг и метрики кэша.
+- `batch --dry-run` и опциональные JSON-события прогресса.
+- `diff-config` и `validate-config --fix`.
+- Opt-in пользовательские regex-паттерны/типы в конфигурации.
+- GUI: упорядочивание/удаление файлов, импорт папки, отмена.
+- Предупреждения о повреждённой кодировке и проверки документации/примеров.
 
 ## 2.1.0
 
-- Existing stable anonymization, streaming, mapping compatibility, GUI,
-  and CLI behavior.
+- Стабильная анонимизация, стриминг, совместимость mapping, GUI и CLI.
